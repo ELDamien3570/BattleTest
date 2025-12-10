@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 5bae84a0a52cb3e48b20ac3bdf0f2751
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 247526
+  packageName: EDEN - Terrain Painter
+  packageVersion: 1.0
+  assetPath: Assets/EDEN_Painter/Texture Profiles/Desert.asset
+  uploadId: 626201

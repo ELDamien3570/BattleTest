@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: f3ad3640b1c40d1478e59738ab148489
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 2100000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 247526
+  packageName: EDEN - Terrain Painter
+  packageVersion: 1.0
+  assetPath: Assets/EDEN_Painter/Demo/DemoSky.mat
+  uploadId: 626201

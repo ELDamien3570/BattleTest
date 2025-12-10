@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: e03d8b40cc6e2484c8aab723c769daf9
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 247526
+  packageName: EDEN - Terrain Painter
+  packageVersion: 1.0
+  assetPath: Assets/EDEN_Painter/Texture Profiles/Grassy.asset
+  uploadId: 626201

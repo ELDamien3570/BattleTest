@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: eaedcc4d6d3cfa449b852a7fac8b9045
+TextScriptImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 247526
+  packageName: EDEN - Terrain Painter
+  packageVersion: 1.0
+  assetPath: Assets/EDEN_Painter/EDEN_Terrain_Painter_Documentation.txt
+  uploadId: 626201
