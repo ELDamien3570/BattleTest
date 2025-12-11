@@ -1,19 +1,50 @@
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using Unity.Rendering;
 
-public struct UnitGroupData: IComponentData
+public struct FormationPositionData : IComponentData
 {
-    public int soldierCount;
+    //Location
     public float3 centerPosition;
     public float3 targetPosition;
-    public UnitGroupState currentState;
-    public Entity commander;
+
+    //Rotation
+    public quaternion facing;
+    public float facingTolerance;
+
+    //Soldier Placement
+    public int columns;
+    public int rows;
+    public int soldierCount;
+
+    //State
+    public FormationState formationState;
 }
 
-public enum UnitGroupState
+public struct FormationMovementData : IComponentData
 {
-    MovingToTarget,
-    EngagingEnemy,
-    HoldingPosition,
-    Retreating
+    public float moveSpeed;
+    public float rotationSpeed;
+}
+
+public struct FormationRenderData : IComponentData
+{
+    public int currentAnimation;       // 0 = idle, 1 = walk
+    public int animationFrame;
+    public float animationTimer;
+    public FixedString64Bytes soldierType;
+}
+
+public enum FormationState
+{
+    rebuilding,
+    retargeting,
+    idle
+}
+
+public struct SoldierOffset : IBufferElementData
+{
+    public float3 Value;
+    public quaternion facing;
 }

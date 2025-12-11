@@ -12,7 +12,7 @@ namespace GapperGames
 
         private void OnValidate()
         {
-            EDEN_Terrain_Painter[] terrains = FindObjectsByType<EDEN_Terrain_Painter>(FindObjectsSortMode.None);
+            EDEN_Terrain_Painter[] terrains = FindObjectsByType<EDEN_Terrain_Painter>(sortMode:FindObjectsSortMode.None);
 
             foreach(EDEN_Terrain_Painter t in terrains)
             {
