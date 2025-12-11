@@ -21,11 +21,20 @@ public partial struct FormationRenderSystem : ISystem
     {
         float deltaTime = SystemAPI.Time.DeltaTime;
         int batchSize = 1023;
-        Matrix4x4[] matrices = new Matrix4x4[batchSize];
+        
+        // Separate matrices for idle and moving soldiers
+        Matrix4x4[] idleMatrices = new Matrix4x4[batchSize];
+        Matrix4x4[] movingMatrices = new Matrix4x4[batchSize];
 
         foreach (var (renderData, positionData, offsets) in SystemAPI.Query<RefRW<FormationRenderData>, RefRW<FormationPositionData>, DynamicBuffer<SoldierOffset>>())
         {
-            var dirOff = offsets;
+            // Safety check: Ensure facing is valid
+            if (math.any(math.isnan(positionData.ValueRO.facing.value)))
+            {
+                positionData.ValueRW.facing = quaternion.identity; 
+            }
+            
+            if (offsets.Length == 0) continue;
 
             string key = renderData.ValueRO.soldierType.ToString();
 
@@ -47,36 +56,67 @@ public partial struct FormationRenderSystem : ISystem
             var playerMeshes = data.so;
             var soldierMaterial = data.mat;
 
-            int currentAnimationIndex = 0; 
-            var animation = playerMeshes.Animations[currentAnimationIndex];
-            int frameCount = animation.Meshes.Count;
-
+            // Update animation timer
             renderData.ValueRW.animationTimer += deltaTime;
             float secondsPerFrame = 1f / playerMeshes.AnimationFPS;
-            while (renderData.ValueRW.animationTimer >= secondsPerFrame)
-            {
-                renderData.ValueRW.animationTimer -= secondsPerFrame;
-                renderData.ValueRW.animationFrame = (renderData.ValueRW.animationFrame + 1) % frameCount;
-            }
+            
+            // Calculate frames for both animations
+            // Assuming 0 = Idle, 1 = Walk
+            var idleAnim = playerMeshes.Animations[0];
+            var walkAnim = playerMeshes.Animations[1];
+            
+            int idleFrameCount = idleAnim.Meshes.Count;
+            int walkFrameCount = walkAnim.Meshes.Count;
+            
+            // We use the same timer for simplicity, but map to different frame counts
+            int idleFrameIndex = (int)(renderData.ValueRW.animationTimer / secondsPerFrame) % idleFrameCount;
+            int walkFrameIndex = (int)(renderData.ValueRW.animationTimer / secondsPerFrame) % walkFrameCount;
+            
+            Mesh idleMesh = idleAnim.Meshes[idleFrameIndex];
+            Mesh walkMesh = walkAnim.Meshes[walkFrameIndex];
 
-            Mesh mesh = animation.Meshes[renderData.ValueRW.animationFrame];
+            int idleCount = 0;
+            int movingCount = 0;
 
-            int index = 0;
             for (int i = 0; i < offsets.Length; i++)
             {
-                float3 soldierWorldPos = positionData.ValueRW.centerPosition + math.rotate(positionData.ValueRW.facing, offsets[i].Value);
+                float3 soldierWorldPos = positionData.ValueRW.centerPosition + math.rotate(positionData.ValueRW.facing, offsets[i].currentOffset);
+                Matrix4x4 matrix = Matrix4x4.TRS(soldierWorldPos, positionData.ValueRW.facing, Vector3.one);
 
-                matrices[index] = Matrix4x4.TRS(soldierWorldPos, positionData.ValueRW.facing, Vector3.one);
-                index++;
-
-                if (index == batchSize || i == offsets.Length - 1)
+                if (offsets[i].isMoving)
                 {
-                    Graphics.DrawMeshInstanced(mesh, 0, soldierMaterial, matrices, index);
-
-                    index = 0;
+                    movingMatrices[movingCount] = matrix;
+                    movingCount++;
+                    
+                    if (movingCount == batchSize)
+                    {
+                        Graphics.DrawMeshInstanced(walkMesh, 0, soldierMaterial, movingMatrices, movingCount);
+                        movingCount = 0;
+                    }
                 }
+                else
+                {
+                    idleMatrices[idleCount] = matrix;
+                    idleCount++;
+                    
+                    if (idleCount == batchSize)
+                    {
+                        Graphics.DrawMeshInstanced(idleMesh, 0, soldierMaterial, idleMatrices, idleCount);
+                        idleCount = 0;
+                    }
+                }
+            }
+            
+            // Draw remaining batches
+            if (movingCount > 0)
+            {
+                Graphics.DrawMeshInstanced(walkMesh, 0, soldierMaterial, movingMatrices, movingCount);
+            }
+            
+            if (idleCount > 0)
+            {
+                Graphics.DrawMeshInstanced(idleMesh, 0, soldierMaterial, idleMatrices, idleCount);
             }
         }
     }
-
 }

@@ -51,10 +51,26 @@ public partial class PlayerInputSystem : SystemBase
                 foreach (var group in SystemAPI.Query<RefRW<FormationPositionData>>())
                 {
                     group.ValueRW.targetPosition = clickedPos;
-                    group.ValueRW.formationState = FormationState.retargeting;
+                    
+                    // Calculate targetFacing toward the move destination
+                    float3 directionToTarget = clickedPos - group.ValueRO.centerPosition;
+                    if (math.lengthsq(directionToTarget) > 0.001f)
+                    {
+                        group.ValueRW.targetFacing = quaternion.LookRotationSafe(math.normalize(directionToTarget), math.up());
+                    }
+                    
+                    // Check if we need to rotate first
+                    float angleDiff = QuaternionAngle(group.ValueRO.facing, group.ValueRW.targetFacing);
+                    
+                    if (angleDiff > 0.1f)
+                    {
+                        group.ValueRW.formationState = FormationState.rotating;
+                    }
+                    else
+                    {
+                        group.ValueRW.formationState = FormationState.retargeting;
+                    }
                 }
-
-                UnityEngine.Debug.Log($"Move command to: {clickedPos}");
             }
         }
 
@@ -122,35 +138,27 @@ public partial class PlayerInputSystem : SystemBase
             float3 rightVec = frontRight - frontLeft;
             float width = math.length(rightVec);
 
-            if (width > 0.1f) // Minimum drag distance
+            if (width > 0.1f)
             {
-                rightVec = rightVec / width; // Normalize
-
-                // Forward is perpendicular to drag line (90° rotation in XZ plane)
+                rightVec = rightVec / width;
                 float3 forwardVec = new float3(-rightVec.z, 0, rightVec.x);
                 quaternion facing = quaternion.LookRotationSafe(forwardVec, math.up());
 
-                // Calculate columns from width
-                float spacing = 1f;
-                int newColumns = FormationBuilderUtility.CalculateColumnsFromWidth(width, spacing);
+                int newColumns = FormationBuilderUtility.CalculateColumnsFromWidth(width, 1f);
 
                 foreach (var group in SystemAPI.Query<RefRW<FormationPositionData>>())
                 {
-                    // Update formation shape
                     group.ValueRW.columns = newColumns;
-                    group.ValueRW.facing = facing;
-
-                    // Set target to the dragged position
+                    
+                    // Set targetFacing (NOT facing)
+                    group.ValueRW.targetFacing = facing;
                     group.ValueRW.targetPosition = center;
 
-                    // IMPORTANT: Set to rebuilding first (will rebuild on next frame)
-                    // Then FormationMovementSystem will handle movement to target
+                    // Trigger rebuild
                     group.ValueRW.formationState = FormationState.rebuilding;
-
-                    UnityEngine.Debug.Log($"Formation drag: {newColumns} columns, width {width:F1}m, moving to {center}");
                 }
             }
-
+            
             // End preview
             isRightClickDragging = false;
             if (previewVisualizer != null)
@@ -168,5 +176,11 @@ public partial class PlayerInputSystem : SystemBase
                 previewVisualizer.IsDragging = false;
             }
         }
+    }
+    
+    private static float QuaternionAngle(quaternion a, quaternion b)
+    {
+        float dot = math.abs(math.dot(a, b));
+        return math.acos(math.min(dot, 1.0f)) * 2.0f;
     }
 }

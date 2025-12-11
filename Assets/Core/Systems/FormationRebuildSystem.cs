@@ -11,31 +11,27 @@ public partial struct FormationRebuildSystem : ISystem
         {
             if (group.ValueRO.formationState == FormationState.rebuilding)
             {
-                // Rebuild using utility
+                // Rebuild formation (calculates new offsets based on current and target facing)
                 FormationBuilderUtility.RebuildFormation(ref group.ValueRW, offsets, spacing: 1f);
 
-                UnityEngine.Debug.Log($"Formation rebuilt: {group.ValueRO.columns}x{group.ValueRO.rows} = {group.ValueRO.soldierCount} soldiers");
-
-                // Check if we should move to target after rebuilding
-                float distanceToTarget = math.distance(group.ValueRO.centerPosition, group.ValueRO.targetPosition);
-
-                if (distanceToTarget > 0.5f) // Has a target to move to
+                // Check if we need to rotate first
+                float angleDiff = QuaternionAngle(group.ValueRO.facing, group.ValueRO.targetFacing);
+                
+                if (angleDiff > 0.1f)
                 {
-                    group.ValueRW.formationState = FormationState.retargeting;
-                    UnityEngine.Debug.Log($"Formation rebuilt, now moving to target at {group.ValueRO.targetPosition}");
+                    group.ValueRW.formationState = FormationState.rotating;
                 }
-                else // Already at target
+                else
                 {
-                    group.ValueRW.formationState = FormationState.idle;
-                    UnityEngine.Debug.Log("Formation rebuilt at spawn location, now idle");
+                    group.ValueRW.formationState = FormationState.reshaping;
                 }
             }
         }
     }
+    
+    private static float QuaternionAngle(quaternion a, quaternion b)
+    {
+        float dot = math.abs(math.dot(a, b));
+        return math.acos(math.min(dot, 1.0f)) * 2.0f;
+    }
 }
-
-
-
-
-
-

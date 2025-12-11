@@ -7,7 +7,6 @@ using UnityEngine;
 [UpdateInGroup(typeof(InitializationSystemGroup))]
 public partial struct BattleSetupSystem : ISystem
 {
-    
     public void OnCreate(ref SystemState state)
     {
         state.RequireForUpdate<BattleSetupData>();
@@ -41,17 +40,18 @@ public partial struct BattleSetupSystem : ISystem
             centerPosition = setupData.playerStartLocation,
             targetPosition = setupData.playerStartLocation,
             facing = quaternion.identity,
+            targetFacing = quaternion.identity, // Initialize targetFacing
             facingTolerance = .1f,
 
             columns = columns,
             soldierCount = setupData.soldiersPerSide,
-            formationState = FormationState.rebuilding
+            formationState = FormationState.rebuilding // CRITICAL: Set to rebuilding to trigger buffer population
         });
 
         eManager.SetComponentData(formation, new FormationMovementData
         {
             moveSpeed = 5f,
-            rotationSpeed = math.radians(180f) / 10f
+            rotationSpeed = math.radians(180f) / 2f
         });
 
         eManager.SetComponentData(formation, new FormationRenderData
@@ -62,16 +62,6 @@ public partial struct BattleSetupSystem : ISystem
             soldierType = setupData.soldierType
         });
 
-        var offsets = eManager.AddBuffer<SoldierOffset>(formation);
-
-
-
-
-        for (int i = 0; i < setupData.soldiersPerSide; i++)
-        {
-
-        }
-
+        eManager.AddBuffer<SoldierOffset>(formation);
     }
-
 }

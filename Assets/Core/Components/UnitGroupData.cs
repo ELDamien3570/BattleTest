@@ -11,15 +11,19 @@ public struct FormationPositionData : IComponentData
 
     //Rotation
     public quaternion facing;
+    public quaternion targetFacing; 
     public float facingTolerance;
 
     //Soldier Placement
     public int columns;
     public int rows;
-    public int soldierCount;
+    public int soldierCount;    
 
     //State
     public FormationState formationState;
+    
+    // Add blend progress
+    public float formationBlendProgress; 
 }
 
 public struct FormationMovementData : IComponentData
@@ -38,13 +42,17 @@ public struct FormationRenderData : IComponentData
 
 public enum FormationState
 {
-    rebuilding,
-    retargeting,
+    rebuilding,    // Trigger state: Calculates new positions once, then transitions
+    rotating,      // Rotating to face target direction
+    reshaping,     // Moving soldiers to new local offsets
+    retargeting,   // Moving the whole formation center to target
     idle
-}
+}      
 
 public struct SoldierOffset : IBufferElementData
 {
-    public float3 Value;
+    public float3 currentOffset;
+    public float3 targetOffset; 
     public quaternion facing;
+    public bool isMoving; 
 }
