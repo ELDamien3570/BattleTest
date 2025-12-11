@@ -148,8 +148,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 16c5c339b4f0e5648bf66e024fe299e0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleSetupAuthoring
-  soldierType: player
+  soldierType:
+  - playerInfantry
+  - playerArcher
+  - playerCavalry
+  - playerCavArcher
   soldiersPerSide: 1000
+  formationsPerSide: 4
   playerStartLocation: {x: 500, y: 0, z: 500}
 --- !u!4 &667910218
 Transform:

@@ -9,9 +9,15 @@ using UnityEngine;
 /// </summary>
 public struct BattleSetupData: IComponentData
 {
-    public FixedString32Bytes soldierType;
+
     // Formation and positioning info
     public int soldiersPerSide;
+    public int formationPreSide;
     public float3 playerStartLocation;
 
+}
+
+public struct SoldierTypeBuffer: IBufferElementData
+{
+    public FixedString32Bytes soldierType;
 }

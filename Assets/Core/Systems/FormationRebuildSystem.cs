@@ -11,7 +11,7 @@ public partial struct FormationRebuildSystem : ISystem
         {
             if (group.ValueRO.formationState == FormationState.rebuilding)
             {
-                FormationBuilderUtility.RebuildFormation(ref group.ValueRW, offsets, spacing: 1f);
+                FormationBuilderUtility.RebuildFormation(ref group.ValueRW, offsets, group.ValueRW.spacing);
 
                 float angleDiff = QuaternionAngle(group.ValueRO.facing, group.ValueRO.targetFacing);
                 

@@ -1,6 +1,7 @@
 using Unity.Entities;
 using Unity.Collections;
 using UnityEngine;
+using System.Collections.Generic;
 using Unity.Rendering;
 
 /// <summary>
@@ -8,9 +9,11 @@ using Unity.Rendering;
 /// </summary>
 public class BattleSetupAuthoring : MonoBehaviour
 {
-    public string soldierType;
+    public List<string> soldierType = new List<string>();
 
     public int soldiersPerSide;
+    public int formationsPerSide;
+    
     public Vector3 playerStartLocation = new Vector3(0, 0, 0);
 
     class BattleBaker : Baker<BattleSetupAuthoring>
@@ -22,10 +25,22 @@ public class BattleSetupAuthoring : MonoBehaviour
             AddComponent(entity, new BattleSetupData
             {
                 soldiersPerSide = authoring.soldiersPerSide,
+                formationPreSide = authoring.formationsPerSide, // Ensure this is passed
                 playerStartLocation = authoring.playerStartLocation,
-                soldierType = authoring.soldierType
             });
 
+            // Add and populate the buffer
+            var buffer = AddBuffer<SoldierTypeBuffer>(entity);
+            foreach (var type in authoring.soldierType)
+            {
+                if (!string.IsNullOrEmpty(type))
+                {
+                    
+
+                    buffer.Add(new SoldierTypeBuffer { soldierType = type });
+                }
+            }
         }
     }
 }
+

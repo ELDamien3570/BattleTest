@@ -43,7 +43,6 @@ public partial struct FormationRenderSystem : ISystem
 
                 if (so == null || mat == null)
                 {
-                    UnityEngine.Debug.LogWarning($"Soldier type {key} not found!");
                     continue;
                 }
 

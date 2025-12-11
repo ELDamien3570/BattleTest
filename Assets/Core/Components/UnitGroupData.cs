@@ -17,13 +17,15 @@ public struct FormationPositionData : IComponentData
     //Soldier Placement
     public int columns;
     public int rows;
-    public int soldierCount;    
+    public int soldierCount;
+    public float spacing;
 
     //State
     public FormationState formationState;
     
     // Add blend progress
-    public float formationBlendProgress; 
+    public float formationBlendProgress;
+    public int troopType; //0 = infantry, 1 = archer, 2 = cav, 3 = cav archer
 }
 
 public struct FormationMovementData : IComponentData

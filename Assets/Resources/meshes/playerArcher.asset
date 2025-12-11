@@ -1,0 +1,99 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2ff99dbc7797ea341b3f9916f06eccff, type: 3}
+  m_Name: playerArcher
+  m_EditorClassIdentifier: Assembly-CSharp::AnimatedMeshScriptableObject
+  AnimationFPS: 30
+  Animations:
+  - Name: ELF_archer_05_combat_idle
+    Meshes:
+    - {fileID: 4300000, guid: 510d0e59662240a4ba3bd1790d52cba5, type: 2}
+    - {fileID: 4300000, guid: 1fe9a32a564b3e144a0bb09ae3beef71, type: 2}
+    - {fileID: 4300000, guid: b6acc593ec7ff1045867c8e90b6a929b, type: 2}
+    - {fileID: 4300000, guid: a5414f5a53ea61545a406fb866379813, type: 2}
+    - {fileID: 4300000, guid: 4ee79635622b31746a000b079a2231fe, type: 2}
+    - {fileID: 4300000, guid: 0c16afb9acef0214ebb1d62c1d39afa8, type: 2}
+    - {fileID: 4300000, guid: 29f9d9e58a91c3040a76b51daa9d17a9, type: 2}
+    - {fileID: 4300000, guid: 7ca64bc4801f96d48bb1ba95caeb4a1d, type: 2}
+    - {fileID: 4300000, guid: df1f306515cf1af4ab36e50313cec46e, type: 2}
+    - {fileID: 4300000, guid: dc35c0ec2a1ce3d4482f36cb0ff509f7, type: 2}
+    - {fileID: 4300000, guid: ac7a5e44252366e4e9a4da1c756cb9d6, type: 2}
+    - {fileID: 4300000, guid: 0284ecc356daf714dbee1175778d606e, type: 2}
+    - {fileID: 4300000, guid: 6376cef88e269b34894d3327278adb5c, type: 2}
+    - {fileID: 4300000, guid: c31c5e2fab8991d48ab83a16056faaa5, type: 2}
+    - {fileID: 4300000, guid: c0bb42db1cdd92f4d8c1afc97470db32, type: 2}
+    - {fileID: 4300000, guid: a447626ff21aed84c84c0dc367421a96, type: 2}
+    - {fileID: 4300000, guid: 27484f776a3c8bd40970ba508b45ab42, type: 2}
+    - {fileID: 4300000, guid: 5d4d8bc1d07ac6b4a92e6d0ab397962d, type: 2}
+    - {fileID: 4300000, guid: 99d8c44e8d815f04ab85bb58d174fce2, type: 2}
+    - {fileID: 4300000, guid: f366a7da436523045b6beda962140a29, type: 2}
+    - {fileID: 4300000, guid: 02d92d4af69658e4bad39a6fdae11517, type: 2}
+    - {fileID: 4300000, guid: 1b999078ea5b38f4b97fb01611cf4af9, type: 2}
+    - {fileID: 4300000, guid: ab58969706a2acc47aa014a52e59f68f, type: 2}
+    - {fileID: 4300000, guid: bc8fda1bd712730449e6a5d5109f8243, type: 2}
+    - {fileID: 4300000, guid: 86988fc3de8f1a043a42a946371af8e0, type: 2}
+    - {fileID: 4300000, guid: 137cc126eed62fd4d91b7fc0de5afc78, type: 2}
+    - {fileID: 4300000, guid: c4bddd4033ce24e4f8163db5745189a5, type: 2}
+    - {fileID: 4300000, guid: 4b0407177c9eb85458b44a990d95fe21, type: 2}
+    - {fileID: 4300000, guid: 9595a936911e1b542a5237fffc9eee1f, type: 2}
+    - {fileID: 4300000, guid: ee4f55e6afb0b90459ef14651ae12da2, type: 2}
+    - {fileID: 4300000, guid: 85991b734d1e68c42b1cadbbf21939c8, type: 2}
+    - {fileID: 4300000, guid: 04502ece409b9754aa8505bce9ec8cc1, type: 2}
+    - {fileID: 4300000, guid: 5e33bb1888bd15b4b9d6052dbf22c82b, type: 2}
+    - {fileID: 4300000, guid: 7890465ad00b8334b8a4fcc57b63a8d1, type: 2}
+    - {fileID: 4300000, guid: 6203021d495ac3f4b9d95fbe9255d6da, type: 2}
+    - {fileID: 4300000, guid: 370c537996afdd54e91803b4cda55110, type: 2}
+    - {fileID: 4300000, guid: 7ce4fb3a6180e3f449ff4cc5daf45143, type: 2}
+    - {fileID: 4300000, guid: 6f420ea19ec2bb048b33d92a8298572c, type: 2}
+    - {fileID: 4300000, guid: 2f6b5c69d2fba28468eb555e2452b100, type: 2}
+    - {fileID: 4300000, guid: 401a59b3e9e40fb438ae567a6bf43d11, type: 2}
+    - {fileID: 4300000, guid: a1143912e5e852d418892957de67c797, type: 2}
+    - {fileID: 4300000, guid: faf58d7c12978084ebc4f2ac131b6762, type: 2}
+    - {fileID: 4300000, guid: 78c76447d00dbad4dac3ab05109745dd, type: 2}
+    - {fileID: 4300000, guid: 313f888c2e1668c409001e01a71059d4, type: 2}
+    - {fileID: 4300000, guid: 280647b6c6951c342841465de8456c69, type: 2}
+    - {fileID: 4300000, guid: 5aeec6d1f4ee6e3419ef0e5ba4dfb6a0, type: 2}
+    - {fileID: 4300000, guid: 952a1671a7c51b943a025102f9e8293b, type: 2}
+    - {fileID: 4300000, guid: 68b2161eb2de0164a9f8a5f400e83ef1, type: 2}
+    - {fileID: 4300000, guid: 9c60a96f5fdf168489894a0cd3707204, type: 2}
+    - {fileID: 4300000, guid: 192944ddeca22d141be568c1c46a1641, type: 2}
+  - Name: ELF_archer_03_run
+    Meshes:
+    - {fileID: 4300000, guid: 6d19e5918c5f1644095c4a7a6a3ee4d4, type: 2}
+    - {fileID: 4300000, guid: 2a6725d30b12d324b8ee850aa91e1015, type: 2}
+    - {fileID: 4300000, guid: 0f6c178c357a8b147a2bd602ded05f3c, type: 2}
+    - {fileID: 4300000, guid: e99de1fb26a79c1418d6afcaf7e7e43d, type: 2}
+    - {fileID: 4300000, guid: 4df518890ebda42429027d0290b5f7c3, type: 2}
+    - {fileID: 4300000, guid: 1deffcdac062439469992d1df28918fb, type: 2}
+    - {fileID: 4300000, guid: a2d3140f9676573409848f39917b53e0, type: 2}
+    - {fileID: 4300000, guid: 678358d1150ed924b95a1f2b71a6c2d2, type: 2}
+    - {fileID: 4300000, guid: a105742d5e8af1e4384c202d68f22350, type: 2}
+    - {fileID: 4300000, guid: beff38cc30137884d86ea02a2d7e3203, type: 2}
+    - {fileID: 4300000, guid: 8ffd73028337fa64c994a54117cacecf, type: 2}
+    - {fileID: 4300000, guid: 7a0eb2a23aebbbb469059ca2638dd745, type: 2}
+    - {fileID: 4300000, guid: 3964e3851cab3b8409c1e030f4af87fa, type: 2}
+    - {fileID: 4300000, guid: e3641b9bf9311964dbb2b7c4341c29fd, type: 2}
+    - {fileID: 4300000, guid: 5c33310834e69a84e80de8dd17a483e4, type: 2}
+    - {fileID: 4300000, guid: 07456f85df6f83d4cb69a6b61422c3ac, type: 2}
+    - {fileID: 4300000, guid: fc146aef1ead75046bf64978daf636cc, type: 2}
+    - {fileID: 4300000, guid: 94552e9b708833149ae1ac8cf34406b4, type: 2}
+    - {fileID: 4300000, guid: 585670d815f105b43aa5826830870af6, type: 2}
+    - {fileID: 4300000, guid: 3260e9d1ecb78bd45b0d95a51a4126f9, type: 2}
+    - {fileID: 4300000, guid: 89452252be60a8249b3e1745fbb9cbaf, type: 2}
+    - {fileID: 4300000, guid: 9174eceb3b40f0045928a87e200f7eca, type: 2}
+    - {fileID: 4300000, guid: c09bf621b384ac648bbe6fb98f3fb0d1, type: 2}
+    - {fileID: 4300000, guid: ab4a2aa66a7ea4e4da91a31bd19113b2, type: 2}
+    - {fileID: 4300000, guid: c76220bb8093e874ba673cd5ed854ce3, type: 2}
+    - {fileID: 4300000, guid: b7556a2f26641724b9464c1ebff996f2, type: 2}
+    - {fileID: 4300000, guid: 2c09b22af3043d546b4ed9e74493c0eb, type: 2}
+    - {fileID: 4300000, guid: 5eb6302d8fd663440b161bedf2c86e65, type: 2}
+    - {fileID: 4300000, guid: 72bd75a3e9a09df46a8b591e5ad36437, type: 2}

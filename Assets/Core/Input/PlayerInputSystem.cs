@@ -28,7 +28,6 @@ public partial class PlayerInputSystem : SystemBase
         {
             var go = new GameObject("Formation Preview Visualizer");
             previewVisualizer = go.AddComponent<FormationPreviewVisualizer>();
-            UnityEngine.Debug.Log("Created FormationPreviewVisualizer automatically");
         }
     }
 
