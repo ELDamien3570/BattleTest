@@ -12,10 +12,10 @@ public partial class PlayerInputSystem : SystemBase
     private float3 dragStartPoint;
     private float3 dragCurrentPoint;
     private int currentSoldierCount = 0;
+    private float currentSpacing = 1f; // Default spacing
     
-    // Drag detection settings
     private const float DragDistanceThreshold = 0.5f; 
-    private const double DragTimeThreshold = 0.20; // Seconds before a hold becomes a drag
+    private const double DragTimeThreshold = 0.20; 
     private double rightMouseDownTime;
 
     protected override void OnCreate()
@@ -28,23 +28,31 @@ public partial class PlayerInputSystem : SystemBase
         {
             var go = new GameObject("Formation Preview Visualizer");
             previewVisualizer = go.AddComponent<FormationPreviewVisualizer>();
+            UnityEngine.Debug.Log("Created FormationPreviewVisualizer automatically");
         }
     }
 
     protected override void OnUpdate()
     {
+        // Update soldier count and spacing from the SELECTED formation
         currentSoldierCount = 0;
         foreach (var group in SystemAPI.Query<RefRO<FormationPositionData>>().WithAll<FormationSelected>())
         {
             currentSoldierCount = group.ValueRO.soldierCount;
-            if (previewVisualizer != null) previewVisualizer.SoldierCount = currentSoldierCount;
+            currentSpacing = group.ValueRO.spacing; // Capture spacing
+
+            if (previewVisualizer != null) 
+            {
+                previewVisualizer.SoldierCount = currentSoldierCount;
+                previewVisualizer.spacing = currentSpacing; // Update visualizer
+            }
             break; 
         }
 
         Camera cam = Camera.main;
         if (cam == null) return;
 
-        
+        // ... (Left Click Selection Logic remains the same) ...
         if (Input.GetMouseButtonDown(0))
         {
             Ray ray = cam.ScreenPointToRay(Input.mousePosition);
@@ -56,7 +64,6 @@ public partial class PlayerInputSystem : SystemBase
                     ecb.RemoveComponent<FormationSelected>(entity);
                 }
 
-                
                 Entity closestEntity = Entity.Null;
                 float closestDist = float.MaxValue;
 
@@ -64,15 +71,12 @@ public partial class PlayerInputSystem : SystemBase
                 {
                     float dist = math.distance(new float2(pos.ValueRO.centerPosition.x, pos.ValueRO.centerPosition.z), new float2(hit.point.x, hit.point.z));
                     
-
-                    //assuming 1.0 spacing 
                     int rows = (int)math.ceil((float)pos.ValueRO.soldierCount / pos.ValueRO.columns);
-                    float width = pos.ValueRO.columns * 1.0f;
-                    float depth = rows * 1.0f;
+                    float width = pos.ValueRO.columns * pos.ValueRO.spacing; // Use spacing
+                    float depth = rows * pos.ValueRO.spacing; // Use spacing
                     float formationRadius = math.length(new float2(width, depth)) * 0.6f; 
                     
-
-                    float selectionThreshold = math.max(1.0f, formationRadius); //change to increare selection threshold
+                    float selectionThreshold = math.max(3.0f, formationRadius);
 
                     if (dist < selectionThreshold && dist < closestDist)
                     {
@@ -83,28 +87,26 @@ public partial class PlayerInputSystem : SystemBase
 
                 if (closestEntity != Entity.Null)
                 {
-                    ecb.AddComponent<FormationSelected>(closestEntity); 
+                    ecb.AddComponent<FormationSelected>(closestEntity);
+                    UnityEngine.Debug.Log($"Selected formation at {hit.point}");
                 }
                 else
                 {
-                    //no formation
+                    UnityEngine.Debug.Log("Selection cleared");
                 }
 
                 ecb.Playback(EntityManager);
                 ecb.Dispose();
             }
-            else
-            {
-                //no ground
-            }
         }
 
+        // ... (Right Click Down/Hold Logic remains the same) ...
         if (Input.GetMouseButtonDown(1))
         {
             Ray ray = cam.ScreenPointToRay(Input.mousePosition);
             if (Physics.Raycast(ray, out RaycastHit hit))
             {
-                isRightClickDragging = false; 
+                isRightClickDragging = false;
                 dragStartPoint = hit.point;
                 dragCurrentPoint = hit.point;
                 rightMouseDownTime = SystemAPI.Time.ElapsedTime;
@@ -130,9 +132,10 @@ public partial class PlayerInputSystem : SystemBase
                         if (previewVisualizer != null && currentSoldierCount > 0)
                         {
                             previewVisualizer.IsDragging = true;
-                            previewVisualizer.DragStart = dragStartPoint;
+                                previewVisualizer.DragStart = dragStartPoint;
                             previewVisualizer.DragEnd = dragCurrentPoint;
                             previewVisualizer.SoldierCount = currentSoldierCount;
+                            previewVisualizer.spacing = currentSpacing; // Ensure spacing is set
                         }
                     }
                 }
@@ -146,6 +149,7 @@ public partial class PlayerInputSystem : SystemBase
             }
         }
 
+        // --- UP: Execute Command ---
         if (Input.GetMouseButtonUp(1))
         {
             Ray ray = cam.ScreenPointToRay(Input.mousePosition);
@@ -185,7 +189,7 @@ public partial class PlayerInputSystem : SystemBase
             
             float angleDiff = QuaternionAngle(group.ValueRO.facing, group.ValueRW.targetFacing);
             
-            if (angleDiff > 0.1f)
+            if (angleDiff > 0.7f)
             {
                 group.ValueRW.formationState = FormationState.rotating;
             }
@@ -193,6 +197,8 @@ public partial class PlayerInputSystem : SystemBase
             {
                 group.ValueRW.formationState = FormationState.retargeting;
             }
+            
+            UnityEngine.Debug.Log($"Move command issued to {targetPos}");
         }
     }
 
@@ -211,7 +217,8 @@ public partial class PlayerInputSystem : SystemBase
             float3 forwardVec = new float3(-rightVec.z, 0, rightVec.x);
             quaternion facing = quaternion.LookRotationSafe(forwardVec, math.up());
 
-            int newColumns = FormationBuilderUtility.CalculateColumnsFromWidth(width, 1f);
+            // Use currentSpacing for calculation
+            int newColumns = FormationBuilderUtility.CalculateColumnsFromWidth(width, currentSpacing);
 
             foreach (var group in SystemAPI.Query<RefRW<FormationPositionData>>().WithAll<FormationSelected>())
             {
@@ -219,6 +226,8 @@ public partial class PlayerInputSystem : SystemBase
                 group.ValueRW.targetFacing = facing;
                 group.ValueRW.targetPosition = center;
                 group.ValueRW.formationState = FormationState.rebuilding;
+
+                UnityEngine.Debug.Log($"Reform command issued: {newColumns} cols at {center}");
             }
         }
     }

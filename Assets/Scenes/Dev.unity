@@ -520,7 +520,8 @@ MonoBehaviour:
   showSoldierPositions: 1
   showFormationBounds: 1
   showFacingArrow: 1
-  SoldierCount: 50
+  SoldierCount: 200
+  spacing: 3
 --- !u!4 &504295676
 Transform:
   m_ObjectHideFlags: 0

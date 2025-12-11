@@ -22,7 +22,9 @@ public class FormationPreviewVisualizer : MonoBehaviour
     public bool IsDragging { get; set; }
     public float3 DragStart { get; set; }
     public float3 DragEnd { get; set; }
-    public int SoldierCount = 50; // Default count
+    public int SoldierCount; // Default count
+
+    public float spacing = 1f; // Initialize to 1f to prevent div by zero
 
     void Start()
     {
@@ -112,8 +114,7 @@ public class FormationPreviewVisualizer : MonoBehaviour
         float3 forwardVec = new float3(-rightVec.z, 0, rightVec.x);
         quaternion facing = quaternion.LookRotationSafe(forwardVec, math.up());
 
-        // Calculate grid
-        float spacing = 1f;
+
         int columns = math.max(1, (int)(width / spacing));
         int soldierCount = math.min(SoldierCount, maxPreviewSoldiers);
         int rows = (int)math.ceil((float)soldierCount / columns);
@@ -176,7 +177,6 @@ public class FormationPreviewVisualizer : MonoBehaviour
         // Draw formation bounds
         if (showFormationBounds)
         {
-            float spacing = 1f;
             int columns = math.max(1, (int)(width / spacing));
             int rows = (int)math.ceil((float)SoldierCount / columns);
 
