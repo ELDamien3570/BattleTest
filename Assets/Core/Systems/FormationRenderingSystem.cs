@@ -22,13 +22,11 @@ public partial struct FormationRenderSystem : ISystem
         float deltaTime = SystemAPI.Time.DeltaTime;
         int batchSize = 1023;
         
-        // Separate matrices for idle and moving soldiers
         Matrix4x4[] idleMatrices = new Matrix4x4[batchSize];
         Matrix4x4[] movingMatrices = new Matrix4x4[batchSize];
 
         foreach (var (renderData, positionData, offsets) in SystemAPI.Query<RefRW<FormationRenderData>, RefRW<FormationPositionData>, DynamicBuffer<SoldierOffset>>())
         {
-            // Safety check: Ensure facing is valid
             if (math.any(math.isnan(positionData.ValueRO.facing.value)))
             {
                 positionData.ValueRW.facing = quaternion.identity; 
@@ -56,19 +54,15 @@ public partial struct FormationRenderSystem : ISystem
             var playerMeshes = data.so;
             var soldierMaterial = data.mat;
 
-            // Update animation timer
             renderData.ValueRW.animationTimer += deltaTime;
             float secondsPerFrame = 1f / playerMeshes.AnimationFPS;
             
-            // Calculate frames for both animations
-            // Assuming 0 = Idle, 1 = Walk
             var idleAnim = playerMeshes.Animations[0];
             var walkAnim = playerMeshes.Animations[1];
             
             int idleFrameCount = idleAnim.Meshes.Count;
             int walkFrameCount = walkAnim.Meshes.Count;
             
-            // We use the same timer for simplicity, but map to different frame counts
             int idleFrameIndex = (int)(renderData.ValueRW.animationTimer / secondsPerFrame) % idleFrameCount;
             int walkFrameIndex = (int)(renderData.ValueRW.animationTimer / secondsPerFrame) % walkFrameCount;
             
@@ -81,7 +75,8 @@ public partial struct FormationRenderSystem : ISystem
             for (int i = 0; i < offsets.Length; i++)
             {
                 float3 soldierWorldPos = positionData.ValueRW.centerPosition + math.rotate(positionData.ValueRW.facing, offsets[i].currentOffset);
-                Matrix4x4 matrix = Matrix4x4.TRS(soldierWorldPos, positionData.ValueRW.facing, Vector3.one);
+                
+                Matrix4x4 matrix = Matrix4x4.TRS(soldierWorldPos, offsets[i].facing, Vector3.one);
 
                 if (offsets[i].isMoving)
                 {
@@ -106,8 +101,7 @@ public partial struct FormationRenderSystem : ISystem
                     }
                 }
             }
-            
-            // Draw remaining batches
+
             if (movingCount > 0)
             {
                 Graphics.DrawMeshInstanced(walkMesh, 0, soldierMaterial, movingMatrices, movingCount);

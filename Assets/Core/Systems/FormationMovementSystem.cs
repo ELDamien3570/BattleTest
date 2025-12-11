@@ -2,6 +2,7 @@ using Unity.Burst;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Collections;
+using UnityEngine;
 
 public partial struct FormationMovementSystem : ISystem
 {
@@ -11,13 +12,14 @@ public partial struct FormationMovementSystem : ISystem
 
         foreach (var (movementData, positionData, entity) in SystemAPI.Query<RefRW<FormationMovementData>, RefRW<FormationPositionData>>().WithEntityAccess())
         {
-            float soldierMoveSpeed = 5f;
+            float soldierMoveSpeed = movementData.ValueRW.moveSpeed;
             float movementThreshold = 0.05f;
+            float soldierRotationSpeed = movementData.ValueRW.rotationSpeed; //speed for individual soldier turns
 
             positionData.ValueRW.facing = math.normalize(positionData.ValueRW.facing);
             positionData.ValueRW.targetFacing = math.normalize(positionData.ValueRW.targetFacing);
 
-            // PHASE 1: Rotating
+            //phase 1: rotating
             if (positionData.ValueRW.formationState == FormationState.rotating)
             {
                 quaternion oldFacing = positionData.ValueRW.facing;
@@ -30,14 +32,16 @@ public partial struct FormationMovementSystem : ISystem
 
                 var offsets = state.EntityManager.GetBuffer<SoldierOffset>(entity);
                 quaternion deltaRotation = math.mul(positionData.ValueRW.facing, math.inverse(oldFacing));
-                quaternion inverseDelta = math.inverse(deltaRotation); // Defined here
+                quaternion inverseDelta = math.inverse(deltaRotation); 
                 
                 for (int i = 0; i < offsets.Length; i++)
                 {
                     var soldier = offsets[i];
-                    // Rotate currentOffset backwards to counteract formation rotation
                     soldier.currentOffset = math.rotate(inverseDelta, soldier.currentOffset);
-                    soldier.isMoving = true;
+                    soldier.isMoving = false; 
+
+                    soldier.facing = math.slerp(soldier.facing, positionData.ValueRW.facing, math.min(1f, soldierRotationSpeed * deltaTime));
+                    
                     offsets[i] = soldier;
                 }
 
@@ -45,7 +49,6 @@ public partial struct FormationMovementSystem : ISystem
                 
                 if (angleDiff < 0.05f)
                 {
-                    // Final snap logic to prevent jitter
                     quaternion snapDelta = math.mul(positionData.ValueRW.targetFacing, math.inverse(positionData.ValueRW.facing));
                     quaternion inverseSnap = math.inverse(snapDelta);
                     
@@ -58,13 +61,12 @@ public partial struct FormationMovementSystem : ISystem
 
                     positionData.ValueRW.facing = positionData.ValueRW.targetFacing;
                     positionData.ValueRW.formationState = FormationState.reshaping;
-                    UnityEngine.Debug.Log("Rotation complete, starting reshape");
                 }
                 
                 continue;
             }
 
-            // PHASE 2: Reshaping
+            //phase 2: reshaping
             if (positionData.ValueRW.formationState == FormationState.reshaping)
             {
                 var offsets = state.EntityManager.GetBuffer<SoldierOffset>(entity);
@@ -78,8 +80,16 @@ public partial struct FormationMovementSystem : ISystem
 
                     if (distance > movementThreshold)
                     {
-                        float step = math.min(distance, soldierMoveSpeed * deltaTime);
-                        soldier.currentOffset += math.normalize(toTarget) * step;
+                        float individualSpeed = soldierMoveSpeed * soldier.speedModifier;
+                        float step = math.min(distance, individualSpeed * deltaTime);
+
+                        float3 localDir = math.normalize(toTarget);
+                        float3 worldDir = math.rotate(positionData.ValueRO.facing, localDir);
+                        quaternion targetLook = quaternion.LookRotationSafe(worldDir, math.up());
+                        
+                        soldier.facing = math.slerp(soldier.facing, targetLook, math.min(1f, soldierRotationSpeed * deltaTime));
+
+                        soldier.currentOffset += localDir * step;
                         soldier.isMoving = true;
                         allInPosition = false;
                         offsets[i] = soldier;
@@ -91,6 +101,9 @@ public partial struct FormationMovementSystem : ISystem
                             soldier.currentOffset = soldier.targetOffset;
                         }
                         soldier.isMoving = false;
+                        
+                        soldier.facing = math.slerp(soldier.facing, positionData.ValueRO.facing, math.min(1f, soldierRotationSpeed * deltaTime));
+                        
                         offsets[i] = soldier;
                     }
                 }
@@ -112,7 +125,7 @@ public partial struct FormationMovementSystem : ISystem
                 continue;
             }
 
-            // PHASE 3: Retargeting (Moving Center)
+            //phase 3: retargetting
             if (positionData.ValueRW.formationState == FormationState.retargeting)
             {
                 float3 toTarget = positionData.ValueRW.targetPosition - positionData.ValueRW.centerPosition;
@@ -124,11 +137,16 @@ public partial struct FormationMovementSystem : ISystem
                     float step = math.min(distance, movementData.ValueRW.moveSpeed * deltaTime);
                     positionData.ValueRW.centerPosition += targetDir * step;
                     
+                    quaternion moveFacing = quaternion.LookRotationSafe(targetDir, math.up());
+
                     var offsets = state.EntityManager.GetBuffer<SoldierOffset>(entity);
                     for (int i = 0; i < offsets.Length; i++)
                     {
                         var soldier = offsets[i];
                         soldier.isMoving = true;
+                        
+                        soldier.facing = math.slerp(soldier.facing, moveFacing, math.min(1f, soldierRotationSpeed * deltaTime));
+                        
                         offsets[i] = soldier;
                     }
                 }
@@ -148,18 +166,21 @@ public partial struct FormationMovementSystem : ISystem
                 continue;
             }
 
-            // PHASE 4: Idle
+            //phase 4: idle
             if (positionData.ValueRW.formationState == FormationState.idle)
             {
                 var offsets = state.EntityManager.GetBuffer<SoldierOffset>(entity);
                 for (int i = 0; i < offsets.Length; i++)
                 {
                     var soldier = offsets[i];
+                    
+                    soldier.facing = math.slerp(soldier.facing, positionData.ValueRW.facing, math.min(1f, soldierRotationSpeed * deltaTime));
+                    
                     if (soldier.isMoving)
                     {
                         soldier.isMoving = false;
-                        offsets[i] = soldier;
                     }
+                    offsets[i] = soldier;
                 }
             }
         }

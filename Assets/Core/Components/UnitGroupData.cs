@@ -55,4 +55,8 @@ public struct SoldierOffset : IBufferElementData
     public float3 targetOffset; 
     public quaternion facing;
     public bool isMoving; 
+    public float speedModifier;
 }
+
+// NEW: Tag component for selection
+public struct FormationSelected : IComponentData { }

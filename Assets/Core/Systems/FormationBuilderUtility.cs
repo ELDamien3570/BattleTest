@@ -1,7 +1,6 @@
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
-using UnityEngine;
 
 public static class FormationBuilderUtility
 {
@@ -11,6 +10,8 @@ public static class FormationBuilderUtility
         int columns = group.columns;
         int rows = (int)math.ceil((float)soldierCount / columns);
         group.rows = rows;
+
+        Unity.Mathematics.Random random = new Unity.Mathematics.Random((uint)(System.DateTime.Now.Ticks & 0xFFFFFFFF));
 
         bool isInitialSetup = offsets.Length == 0;
         
@@ -34,33 +35,27 @@ public static class FormationBuilderUtility
                 {
                     currentOffset = localOffset,
                     targetOffset = localOffset,
-                    facing = quaternion.identity,
-                    isMoving = false
+                    facing = group.facing, 
+                    isMoving = false,
+                    speedModifier = random.NextFloat(0.6f, 2.15f) //randomize speed
                 });
             }
-            
-            // Set initial facing to target facing
+
             group.targetFacing = math.normalize(group.facing);
         }
         else
         {
-            // REMOVED: The logic that overwrote targetFacing. 
-            // We now trust PlayerInputSystem to set group.targetFacing correctly.
-            
-            // Ensure quaternions are valid
             group.facing = math.normalize(group.facing);
             group.targetFacing = math.normalize(group.targetFacing);
 
             quaternion currentFacing = group.facing;
             
-            // Store current world positions using CURRENT facing
             NativeArray<float3> soldierWorldPositions = new NativeArray<float3>(soldierCount, Allocator.Temp);
             for (int i = 0; i < offsets.Length; i++)
             {
                 soldierWorldPositions[i] = group.centerPosition + math.rotate(currentFacing, offsets[i].currentOffset);
             }
 
-            // Generate new formation positions in TARGET facing space
             NativeArray<float3> newLocalPositions = new NativeArray<float3>(soldierCount, Allocator.Temp);
             float halfWidth = (columns - 1) * 0.5f * spacing;
 
@@ -76,9 +71,8 @@ public static class FormationBuilderUtility
                 );
             }
 
-            // Assign soldiers to closest positions
             AssignSoldiersToClosestPositions(offsets, soldierWorldPositions, newLocalPositions, 
-                group.centerPosition, currentFacing, group.targetFacing);
+                group.centerPosition, currentFacing, group.targetFacing, ref random);
             
             soldierWorldPositions.Dispose();
             newLocalPositions.Dispose();
@@ -93,7 +87,8 @@ public static class FormationBuilderUtility
         NativeArray<float3> newLocalPositions,
         float3 centerPosition,
         quaternion currentFacing,
-        quaternion targetFacing)
+        quaternion targetFacing,
+        ref Unity.Mathematics.Random random)
     {
         int count = soldiers.Length;
         
@@ -107,7 +102,6 @@ public static class FormationBuilderUtility
             int bestIndex = -1;
             float bestDistance = float.MaxValue;
             
-            // Find closest position in TARGET facing space
             for (int j = 0; j < newLocalPositions.Length; j++)
             {
                 if (positionTaken[j]) continue;
@@ -127,8 +121,6 @@ public static class FormationBuilderUtility
                 positionTaken[bestIndex] = true;
                 newTargets[i] = newLocalPositions[bestIndex];
                 
-                // Transform current world position into CURRENT facing space
-                // This ensures the soldier stays visually in place relative to the center
                 float3 offsetFromCenter = soldierWorldPos - centerPosition;
                 newCurrents[i] = math.rotate(math.inverse(currentFacing), offsetFromCenter);
             }
@@ -145,6 +137,9 @@ public static class FormationBuilderUtility
             soldier.currentOffset = newCurrents[i];
             soldier.targetOffset = newTargets[i];
             soldier.isMoving = true;
+
+            soldier.speedModifier = random.NextFloat(0.85f, 1.15f); //randomize speed value
+            
             soldiers[i] = soldier;
         }
         

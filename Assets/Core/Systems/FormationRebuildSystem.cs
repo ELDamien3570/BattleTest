@@ -11,13 +11,11 @@ public partial struct FormationRebuildSystem : ISystem
         {
             if (group.ValueRO.formationState == FormationState.rebuilding)
             {
-                // Rebuild formation (calculates new offsets based on current and target facing)
                 FormationBuilderUtility.RebuildFormation(ref group.ValueRW, offsets, spacing: 1f);
 
-                // Check if we need to rotate first
                 float angleDiff = QuaternionAngle(group.ValueRO.facing, group.ValueRO.targetFacing);
                 
-                if (angleDiff > 0.1f)
+                if (angleDiff > 0.2f) //change effect how sensitive formations are
                 {
                     group.ValueRW.formationState = FormationState.rotating;
                 }

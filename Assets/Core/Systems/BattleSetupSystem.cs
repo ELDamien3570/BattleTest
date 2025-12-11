@@ -27,41 +27,70 @@ public partial struct BattleSetupSystem : ISystem
     {
         var eManager = state.EntityManager;
 
-        int columns = FormationBuilderUtility.CalculateSquareGridColumns(setupData.soldiersPerSide);
+        // Configuration for multiple formations
+        int formationCount = 3; // Number of formations to spawn
+        float formationGap = 2f; // Space between formations
+        float soldierSpacing = 1f; // Should match the spacing used in FormationBuilderUtility
 
-        Entity formation = eManager.CreateEntity(
-            typeof(FormationPositionData),
-            typeof(FormationMovementData),
-            typeof(FormationRenderData)
-        );
+        int soldiersPerFormation = setupData.soldiersPerSide;
+        int columns = FormationBuilderUtility.CalculateSquareGridColumns(soldiersPerFormation);
+        
+        // Calculate the physical width of one formation
+        // Width = (columns - 1) * spacing
+        float singleFormationWidth = (columns - 1) * soldierSpacing;
 
-        eManager.SetComponentData(formation, new FormationPositionData
+        // Calculate the total width of the entire army line
+        float totalArmyWidth = (singleFormationWidth * formationCount) + (formationGap * (formationCount - 1));
+
+        // Calculate the starting X offset (leftmost edge relative to center)
+        float startXOffset = -totalArmyWidth * 0.5f;
+
+        // The center of the first formation is: StartEdge + HalfFormationWidth
+        float currentXOffset = startXOffset + (singleFormationWidth * 0.5f);
+
+        for (int i = 0; i < formationCount; i++)
         {
-            centerPosition = setupData.playerStartLocation,
-            targetPosition = setupData.playerStartLocation,
-            facing = quaternion.identity,
-            targetFacing = quaternion.identity, // Initialize targetFacing
-            facingTolerance = .1f,
+            Entity formation = eManager.CreateEntity(
+                typeof(FormationPositionData),
+                typeof(FormationMovementData),
+                typeof(FormationRenderData)
+            );
 
-            columns = columns,
-            soldierCount = setupData.soldiersPerSide,
-            formationState = FormationState.rebuilding // CRITICAL: Set to rebuilding to trigger buffer population
-        });
+            // Calculate position for this specific formation
+            float3 spawnPosition = setupData.playerStartLocation;
+            spawnPosition.x += currentXOffset;
 
-        eManager.SetComponentData(formation, new FormationMovementData
-        {
-            moveSpeed = 5f,
-            rotationSpeed = math.radians(180f) / 2f
-        });
+            eManager.SetComponentData(formation, new FormationPositionData
+            {
+                centerPosition = spawnPosition,
+                targetPosition = spawnPosition,
+                facing = quaternion.identity,
+                targetFacing = quaternion.identity, 
+                facingTolerance = .1f,
 
-        eManager.SetComponentData(formation, new FormationRenderData
-        {
-            currentAnimation = 0,
-            animationFrame = 0,
-            animationTimer = 0,
-            soldierType = setupData.soldierType
-        });
+                columns = columns,
+                soldierCount = soldiersPerFormation,
+                formationState = FormationState.rebuilding 
+            });
 
-        eManager.AddBuffer<SoldierOffset>(formation);
+            eManager.SetComponentData(formation, new FormationMovementData
+            {
+                moveSpeed = 5f,
+                rotationSpeed = math.radians(180f) / 2f
+            });
+
+            eManager.SetComponentData(formation, new FormationRenderData
+            {
+                currentAnimation = 0,
+                animationFrame = 0,
+                animationTimer = 0,
+                soldierType = setupData.soldierType
+            });
+
+            eManager.AddBuffer<SoldierOffset>(formation);
+
+            // Advance offset for the next formation
+            currentXOffset += singleFormationWidth + formationGap;
+        }
     }
 }
