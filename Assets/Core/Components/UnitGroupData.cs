@@ -27,6 +27,13 @@ public struct FormationPositionData : IComponentData
     public float formationBlendProgress;
     
 }
+public struct FormationEngagementData : IComponentData
+{
+    public bool isEngaged;       
+    public bool needsEngagementUpdate; 
+    public float3 lastEngagementPos;   
+    public quaternion lastEngagementRot;
+}
 
 public struct FormationMovementData : IComponentData
 {
@@ -37,7 +44,6 @@ public struct FormationMovementData : IComponentData
 public struct FormationCombatData : IComponentData
 {
     public int troopType; //0 = infantry, 1 = archer, 2 = cav, 3 = cav archer
-
     public int meleeDamage;
     public int meleeDefense;
 }

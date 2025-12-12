@@ -67,7 +67,8 @@ public partial struct BattleSetupSystem : ISystem
                 typeof(PhysicsCollider),
                 typeof(PhysicsVelocity),
                 typeof(PhysicsWorldIndex),
-                typeof(FormationColliderData)
+                typeof(FormationColliderData),
+                typeof(FormationEngagementData)
             );
 
             float3 spawnPosition = setupData.playerStartLocation;
@@ -149,21 +150,29 @@ public partial struct BattleSetupSystem : ISystem
                 {
                     Center = colliderCenter,
                     Size = new float3(exactSingleFormWidth, 2f, singleFormationDepth),
-                    Orientation = math.inverse(quaternion.identity),
+                    Orientation = (quaternion.identity),
                     BevelRadius = 0.05f
                 },
                 filter,
                 material
                 ),             
             });
-            
+
+            eManager.SetComponentData(formation, new FormationEngagementData
+            {
+                isEngaged = false,
+                needsEngagementUpdate = true,
+                lastEngagementPos = float3.zero,
+                lastEngagementRot = quaternion.identity
+            });
+
 
             eManager.SetComponentData(formation, new FormationPositionData
             {
                 centerPosition = spawnPosition,
                 targetPosition = spawnPosition,
-                facing = math.inverse(quaternion.identity),
-                targetFacing = math.inverse(quaternion.identity), 
+                facing = (quaternion.identity),
+                targetFacing = (quaternion.identity), 
                 facingTolerance = .1f,
                 spacing = detSpacing,
                 columns = columns,
@@ -228,7 +237,8 @@ public partial struct BattleSetupSystem : ISystem
                 typeof(PhysicsCollider),
                 typeof(PhysicsVelocity),
                 typeof(PhysicsWorldIndex),
-                typeof(FormationColliderData)
+                typeof(FormationColliderData),
+                typeof(FormationEngagementData)
             );
 
             float3 spawnPosition = setupData.aiStartLocation;
@@ -314,6 +324,14 @@ public partial struct BattleSetupSystem : ISystem
                     Orientation = quaternion.identity,
                     BevelRadius = 0.05f
                 }),
+            });
+
+            eManager.SetComponentData(formation, new FormationEngagementData
+            {
+                isEngaged = false,
+                needsEngagementUpdate = true,
+                lastEngagementPos = float3.zero,
+                lastEngagementRot = quaternion.identity
             });
 
             eManager.SetComponentData(formation, new FormationPositionData

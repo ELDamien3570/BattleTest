@@ -180,7 +180,16 @@ public partial struct FormationMovementSystem : ISystem
                     offsets[i] = soldier;
                 }
             }
+
+            if (SystemAPI.HasComponent<FormationEngagementData>(entity))
+            {
+                var engData = SystemAPI.GetComponent<FormationEngagementData>(entity);
+                engData.needsEngagementUpdate = true;
+                SystemAPI.SetComponent(entity, engData);
+            }
         }
+
+
     }
     
     private static float QuaternionAngle(quaternion a, quaternion b)

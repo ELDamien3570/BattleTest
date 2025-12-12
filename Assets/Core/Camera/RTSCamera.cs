@@ -166,7 +166,13 @@ public class RTSCamera : MonoBehaviour
         var mouse = Mouse.current;
         if (mouse == null || !mouse.rightButton.isPressed) return;
         if (rotateInput.sqrMagnitude < 0.0001f) return;
-        pivot.Rotate(Vector3.up, rotateInput.x * rotateSpeed, Space.World); 
+        if (Input.GetKeyDown(KeyCode.LeftAlt)) {
+            pivot.Rotate(Vector3.up, rotateInput.x * rotateSpeed, Space.World);
+        }
+        
+        //BROKEN
+
+
     }
 
     void ApplyZoomWithTilt()

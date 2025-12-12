@@ -1,29 +1,36 @@
 using System.Collections.Generic;
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
-using Unity.Transforms;
 using UnityEngine;
 
 public partial struct FormationRenderSystem : ISystem
 {
-    private static Dictionary<string, (AnimatedMeshScriptableObject so, Material mat)> renderCache;
+    private static Dictionary<FixedString64Bytes, (AnimatedMeshScriptableObject so, Material mat)> renderCache;
+
+    // Persistent arrays - allocated once, reused every frame
+    private static Matrix4x4[] idleMatrices;
+    private static Matrix4x4[] movingMatrices;
+    private static Matrix4x4[] combatMatrices;
+    private const int BatchSize = 1023;
 
     public void OnCreate(ref SystemState state)
     {
         if (renderCache == null)
-            renderCache = new Dictionary<string, (AnimatedMeshScriptableObject, Material)>();
+        {
+            renderCache = new Dictionary<FixedString64Bytes, (AnimatedMeshScriptableObject, Material)>();
+            idleMatrices = new Matrix4x4[BatchSize];
+            movingMatrices = new Matrix4x4[BatchSize];
+            combatMatrices = new Matrix4x4[BatchSize];
+        }
     }
 
     public void OnUpdate(ref SystemState state)
     {
         float deltaTime = SystemAPI.Time.DeltaTime;
-        int batchSize = 1023;
 
-        Matrix4x4[] idleMatrices = new Matrix4x4[batchSize];
-        Matrix4x4[] movingMatrices = new Matrix4x4[batchSize];
-        Matrix4x4[] combatMatrices = new Matrix4x4[batchSize];
-
-        foreach (var (renderData, positionData, offsets) in SystemAPI.Query<RefRW<FormationRenderData>, RefRW<FormationPositionData>, DynamicBuffer<SoldierOffset>>())
+        foreach (var (renderData, positionData, offsets) in
+            SystemAPI.Query<RefRW<FormationRenderData>, RefRW<FormationPositionData>, DynamicBuffer<SoldierOffset>>())
         {
             if (math.any(math.isnan(positionData.ValueRO.facing.value)))
             {
@@ -32,19 +39,23 @@ public partial struct FormationRenderSystem : ISystem
 
             if (offsets.Length == 0) continue;
 
-            string meshName = renderData.ValueRO.soldierType.ToString();
-            string matName = renderData.ValueRO.renderMaterial.ToString();
-            string cacheKey = $"{meshName}_{matName}";
+            // Build cache key without string allocations
+            FixedString64Bytes cacheKey = default;
+            cacheKey.Append(renderData.ValueRO.soldierType);
+            cacheKey.Append('_');
+            cacheKey.Append(renderData.ValueRO.renderMaterial);
 
             if (!renderCache.TryGetValue(cacheKey, out var data))
             {
+                // Only allocate strings on cache miss (rare - only happens once per type)
+                string meshName = renderData.ValueRO.soldierType.ToString();
+                string matName = renderData.ValueRO.renderMaterial.ToString();
+
                 AnimatedMeshScriptableObject so = Resources.Load<AnimatedMeshScriptableObject>($"meshes/{meshName}");
                 Material mat = Resources.Load<Material>($"materials/{matName}");
 
                 if (so == null || mat == null)
                 {
-                    if (so == null) return;
-                    if (mat == null) return;
                     continue;
                 }
 
@@ -76,15 +87,14 @@ public partial struct FormationRenderSystem : ISystem
 
             for (int i = 0; i < offsets.Length; i++)
             {
-                float3 soldierWorldPos = positionData.ValueRW.centerPosition + math.rotate(positionData.ValueRW.facing, offsets[i].currentOffset);
+                float3 soldierWorldPos = positionData.ValueRO.centerPosition +
+                    math.rotate(positionData.ValueRO.facing, offsets[i].currentOffset);
                 Matrix4x4 matrix = Matrix4x4.TRS(soldierWorldPos, offsets[i].facing, Vector3.one);
 
-                // Priority: Combat > Moving > Idle
                 if (offsets[i].isEngaged)
                 {
                     combatMatrices[combatCount++] = matrix;
-
-                    if (combatCount == batchSize)
+                    if (combatCount == BatchSize)
                     {
                         Graphics.DrawMeshInstanced(combatMesh, 0, soldierMaterial, combatMatrices, combatCount);
                         combatCount = 0;
@@ -93,8 +103,7 @@ public partial struct FormationRenderSystem : ISystem
                 else if (offsets[i].isMoving)
                 {
                     movingMatrices[movingCount++] = matrix;
-
-                    if (movingCount == batchSize)
+                    if (movingCount == BatchSize)
                     {
                         Graphics.DrawMeshInstanced(walkMesh, 0, soldierMaterial, movingMatrices, movingCount);
                         movingCount = 0;
@@ -103,8 +112,7 @@ public partial struct FormationRenderSystem : ISystem
                 else
                 {
                     idleMatrices[idleCount++] = matrix;
-
-                    if (idleCount == batchSize)
+                    if (idleCount == BatchSize)
                     {
                         Graphics.DrawMeshInstanced(idleMesh, 0, soldierMaterial, idleMatrices, idleCount);
                         idleCount = 0;
@@ -112,13 +120,10 @@ public partial struct FormationRenderSystem : ISystem
                 }
             }
 
-            // Flush remaining
             if (combatCount > 0)
                 Graphics.DrawMeshInstanced(combatMesh, 0, soldierMaterial, combatMatrices, combatCount);
-
             if (movingCount > 0)
                 Graphics.DrawMeshInstanced(walkMesh, 0, soldierMaterial, movingMatrices, movingCount);
-
             if (idleCount > 0)
                 Graphics.DrawMeshInstanced(idleMesh, 0, soldierMaterial, idleMatrices, idleCount);
         }
