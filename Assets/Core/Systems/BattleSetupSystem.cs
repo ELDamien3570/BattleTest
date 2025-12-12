@@ -2,8 +2,9 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Collections;
 using Unity.Physics;
-using UnityEditor.Search;
+using UnityEngine;
 using Unity.Transforms;
+using Unity.Rendering;
 
 
 [UpdateInGroup(typeof(InitializationSystemGroup))]
@@ -17,10 +18,8 @@ public partial struct BattleSetupSystem : ISystem
 
     public void OnUpdate(ref SystemState state)
     {
-        
         var battleSetupData = SystemAPI.GetSingleton<BattleSetupData>();
         var battleSetupEntity = SystemAPI.GetSingletonEntity<BattleSetupData>(); // Get the entity to access buffer
-
 
         NativeArray<FixedString32Bytes> soldierTypesCopy = default;
 
@@ -35,9 +34,8 @@ public partial struct BattleSetupSystem : ISystem
             }
         }
 
-
         SpawnPlayerArmy(ref state, battleSetupData, battleSetupEntity, soldierTypesCopy);
-        //SpawnAIArmy(ref state, battleSetupData, battleSetupEntity, soldierTypesCopy);
+        SpawnAIArmy(ref state, battleSetupData, battleSetupEntity, soldierTypesCopy);
         state.Enabled = false; 
     }
 
@@ -67,6 +65,8 @@ public partial struct BattleSetupSystem : ISystem
                 typeof(PlayerControlled),
                 typeof(LocalTransform),
                 typeof(PhysicsCollider),
+                typeof(PhysicsVelocity),
+                typeof(PhysicsWorldIndex),
                 typeof(FormationColliderData)
             );
 
@@ -115,12 +115,23 @@ public partial struct BattleSetupSystem : ISystem
             float singleFormationDepth = estRows * detSpacing - detSpacing;
             float exactSingleFormWidth = (columns - 1) * detSpacing;
 
-
+            // Corrected to Local Space (0,0,0) instead of World Space (spawnPosition)
             float3 colliderCenter = new float3(0, .9f, -singleFormationDepth / 2);
 
             #endregion
 
+            eManager.SetComponentData(formation, new PhysicsVelocity
+            {
+                Linear = float3.zero,
+                Angular = float3.zero
+            });
+
+            var filter = FormationPhysics.PlayerFilter;
+            var material = FormationPhysics.TriggerMaterial;
+            uint newWorldIndex = 0;
+
             eManager.SetComponentData(formation, LocalTransform.FromPositionRotation(spawnPosition, quaternion.identity));
+            eManager.SetSharedComponentManaged(formation, new PhysicsWorldIndex(newWorldIndex));
 
             eManager.SetComponentData(formation, new FormationColliderData
             {
@@ -128,16 +139,8 @@ public partial struct BattleSetupSystem : ISystem
                 lastSoldierCount = soldiersPerFormation,
                 spacing = detSpacing,
                 needsRebuilt = true,
-                filter = new CollisionFilter
-                {
-                    BelongsTo = PhysicsLayers.Formations,
-                    CollidesWith = PhysicsLayers.Formations,
-                    GroupIndex = 0
-                },
-                material = new Unity.Physics.Material
-                {
-                   CollisionResponse = CollisionResponsePolicy.RaiseTriggerEvents
-                }
+                filter = filter,
+                material = material, 
             });
 
             eManager.SetComponentData(formation, new PhysicsCollider
@@ -146,18 +149,21 @@ public partial struct BattleSetupSystem : ISystem
                 {
                     Center = colliderCenter,
                     Size = new float3(exactSingleFormWidth, 2f, singleFormationDepth),
-                    Orientation = quaternion.identity,
+                    Orientation = math.inverse(quaternion.identity),
                     BevelRadius = 0.05f
-                }),
+                },
+                filter,
+                material
+                ),             
             });
-
+            
 
             eManager.SetComponentData(formation, new FormationPositionData
             {
                 centerPosition = spawnPosition,
                 targetPosition = spawnPosition,
-                facing = quaternion.identity,
-                targetFacing = quaternion.identity, 
+                facing = math.inverse(quaternion.identity),
+                targetFacing = math.inverse(quaternion.identity), 
                 facingTolerance = .1f,
                 spacing = detSpacing,
                 columns = columns,
@@ -217,13 +223,15 @@ public partial struct BattleSetupSystem : ISystem
                 typeof(FormationMovementData),
                 typeof(FormationRenderData),
                 typeof(FormationCombatData),
-                typeof(PlayerControlled),
+                typeof(AiControlled),
                 typeof(LocalTransform),
                 typeof(PhysicsCollider),
+                typeof(PhysicsVelocity),
+                typeof(PhysicsWorldIndex),
                 typeof(FormationColliderData)
             );
 
-            float3 spawnPosition = setupData.playerStartLocation;
+            float3 spawnPosition = setupData.aiStartLocation;
             spawnPosition.x += currentXOffset;
 
             FixedString32Bytes currentSoldierType = "player";
@@ -268,12 +276,24 @@ public partial struct BattleSetupSystem : ISystem
             float singleFormationDepth = estRows * detSpacing - detSpacing;
             float exactSingleFormWidth = (columns - 1) * detSpacing;
 
-
+            // Corrected to Local Space (0,0,0) instead of World Space (spawnPosition)
             float3 colliderCenter = new float3(0, .9f, -singleFormationDepth / 2);
 
             #endregion
 
+            var filter = FormationPhysics.AIFilter;
+            var material = FormationPhysics.TriggerMaterial;
+            uint newWorldIndex = 0;
+
             eManager.SetComponentData(formation, LocalTransform.FromPositionRotation(spawnPosition, quaternion.identity));
+            eManager.SetSharedComponentManaged(formation, new PhysicsWorldIndex(newWorldIndex));
+
+
+            eManager.SetComponentData(formation, new PhysicsVelocity
+            {
+                Linear = float3.zero,
+                Angular = float3.zero
+            });
 
             eManager.SetComponentData(formation, new FormationColliderData
             {
@@ -281,16 +301,8 @@ public partial struct BattleSetupSystem : ISystem
                 lastSoldierCount = soldiersPerFormation,
                 spacing = detSpacing,
                 needsRebuilt = true,
-                filter = new CollisionFilter
-                {
-                    BelongsTo = PhysicsLayers.Formations,
-                    CollidesWith = PhysicsLayers.Formations,
-                    GroupIndex = 1
-                },
-                material = new Unity.Physics.Material
-                {
-                    CollisionResponse = CollisionResponsePolicy.RaiseTriggerEvents
-                }
+                filter = filter,
+                material = material
             });
 
             eManager.SetComponentData(formation, new PhysicsCollider
@@ -303,7 +315,6 @@ public partial struct BattleSetupSystem : ISystem
                     BevelRadius = 0.05f
                 }),
             });
-
 
             eManager.SetComponentData(formation, new FormationPositionData
             {
@@ -348,13 +359,29 @@ public partial struct BattleSetupSystem : ISystem
 }
 
 
-
-public static class PhysicsLayers
+public static class FormationPhysics
 {
-    public const uint Nothing = 0;
+    // Collision categories
+    public const uint PlayerFormation = 1u << 8;
+    public const uint AIFormation = 1u << 9;
 
-    public const uint Formations = 1u << 8;
-    public const uint Projectile = 1u << 10;
+    public static CollisionFilter PlayerFilter => new CollisionFilter
+    {
+        BelongsTo = PlayerFormation,
+        CollidesWith = AIFormation,  // Only collide with enemy
+        GroupIndex = 0
+    };
 
-    public const uint Everything = ~0u;
+    public static CollisionFilter AIFilter => new CollisionFilter
+    {
+        BelongsTo = AIFormation,
+        CollidesWith = PlayerFormation,  // Only collide with enemy
+        GroupIndex = 0
+    };
+
+    // Material that raises trigger events (no physical collision response)
+    public static Unity.Physics.Material TriggerMaterial => new Unity.Physics.Material
+    {
+        CollisionResponse = CollisionResponsePolicy.RaiseTriggerEvents
+    };
 }
