@@ -2,54 +2,77 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Collections;
 using Unity.Physics;
-using UnityEngine;
+
 using Unity.Transforms;
 using Unity.Rendering;
-
 
 [UpdateInGroup(typeof(InitializationSystemGroup))]
 public partial struct BattleSetupSystem : ISystem
 {
+    // Track allocated blobs to dispose of them when the system is destroyed
+    private NativeList<BlobAssetReference<Collider>> _allocatedColliders;
 
     public void OnCreate(ref SystemState state)
     {
-        state.RequireForUpdate<BattleSetupData>();     
+        state.RequireForUpdate<BattleSetupData>();
+        _allocatedColliders = new NativeList<BlobAssetReference<Collider>>(Allocator.Persistent);
+    }
+
+    public void OnDestroy(ref SystemState state)
+    {
+        // Dispose of all physics colliders created by this system
+        if (_allocatedColliders.IsCreated)
+        {
+            foreach (var collider in _allocatedColliders)
+            {
+                if (collider.IsCreated)
+                    collider.Dispose();
+            }
+            _allocatedColliders.Dispose();
+        }
     }
 
     public void OnUpdate(ref SystemState state)
     {
         var battleSetupData = SystemAPI.GetSingleton<BattleSetupData>();
-        var battleSetupEntity = SystemAPI.GetSingletonEntity<BattleSetupData>(); // Get the entity to access buffer
+        var battleSetupEntity = SystemAPI.GetSingletonEntity<BattleSetupData>();
 
-        NativeArray<FixedString32Bytes> soldierTypesCopy = default;
+        // Initialize with length 0 to avoid "default" uninitialized struct issues
+        NativeArray<FixedString32Bytes> soldierTypesCopy = new NativeArray<FixedString32Bytes>(0, Allocator.Temp);
 
         if (state.EntityManager.HasBuffer<SoldierTypeBuffer>(battleSetupEntity))
         {
             var buffer = state.EntityManager.GetBuffer<SoldierTypeBuffer>(battleSetupEntity);
+            // Resize and copy
             soldierTypesCopy = new NativeArray<FixedString32Bytes>(buffer.Length, Allocator.Temp);
-
             for (int i = 0; i < buffer.Length; i++)
             {
                 soldierTypesCopy[i] = buffer[i].soldierType;
             }
         }
 
-        SpawnPlayerArmy(ref state, battleSetupData, battleSetupEntity, soldierTypesCopy);
-        SpawnAIArmy(ref state, battleSetupData, battleSetupEntity, soldierTypesCopy);
-        state.Enabled = false; 
+        // Use a cache to avoid creating duplicate colliders for the same unit type
+        // Key: Soldier Type Name, Value: Collider Blob
+        var colliderCache = new NativeHashMap<FixedString32Bytes, BlobAssetReference<Collider>>(4, Allocator.Temp);
+
+        SpawnPlayerArmy(ref state, battleSetupData, battleSetupEntity, soldierTypesCopy, ref colliderCache);
+        SpawnAIArmy(ref state, battleSetupData, battleSetupEntity, soldierTypesCopy, ref colliderCache);
+        
+        colliderCache.Dispose();
+        state.Enabled = false;
     }
 
-    public void SpawnPlayerArmy(ref SystemState state, BattleSetupData setupData, Entity setupEntity, NativeArray<FixedString32Bytes> soldierType)
+    public void SpawnPlayerArmy(ref SystemState state, BattleSetupData setupData, Entity setupEntity, NativeArray<FixedString32Bytes> soldierType, ref NativeHashMap<FixedString32Bytes, BlobAssetReference<Collider>> colliderCache)
     {
         var eManager = state.EntityManager;
 
-        int formationCount = setupData.formationPreSide; 
-        float formationGap = 2f; 
-        float soldierSpacing = 2f; 
+        int formationCount = setupData.formationPreSide;
+        float formationGap = 2f;
+        float soldierSpacing = 2f;
 
         int soldiersPerFormation = setupData.soldiersPerSide;
         int columns = FormationBuilderUtility.CalculateSquareGridColumns(soldiersPerFormation);
-        
+
         float singleFormationWidth = (columns - 1) * soldierSpacing + 1f;
         float totalArmyWidth = (singleFormationWidth * formationCount) + (formationGap * (formationCount - 1));
         float startXOffset = -totalArmyWidth * 0.5f;
@@ -74,7 +97,7 @@ public partial struct BattleSetupSystem : ISystem
             float3 spawnPosition = setupData.playerStartLocation;
             spawnPosition.x += currentXOffset;
 
-            FixedString32Bytes currentSoldierType = "player"; 
+            FixedString32Bytes currentSoldierType = "player";
             if (soldierType.Length > 0)
             {
                 int typeIndex = i % soldierType.Length;
@@ -116,7 +139,6 @@ public partial struct BattleSetupSystem : ISystem
             float singleFormationDepth = estRows * detSpacing - detSpacing;
             float exactSingleFormWidth = (columns - 1) * detSpacing;
 
-            // Corrected to Local Space (0,0,0) instead of World Space (spawnPosition)
             float3 colliderCenter = new float3(0, .9f, -singleFormationDepth / 2);
 
             #endregion
@@ -141,12 +163,14 @@ public partial struct BattleSetupSystem : ISystem
                 spacing = detSpacing,
                 needsRebuilt = true,
                 filter = filter,
-                material = material, 
+                material = material,
             });
 
-            eManager.SetComponentData(formation, new PhysicsCollider
+            // Check cache for existing collider blob
+            if (!colliderCache.TryGetValue(currentSoldierType, out BlobAssetReference<Collider> colliderBlob))
             {
-                Value = Unity.Physics.BoxCollider.Create(new BoxGeometry
+                // Create new blob if not found
+                colliderBlob = Unity.Physics.BoxCollider.Create(new BoxGeometry
                 {
                     Center = colliderCenter,
                     Size = new float3(exactSingleFormWidth, 2f, singleFormationDepth),
@@ -155,7 +179,16 @@ public partial struct BattleSetupSystem : ISystem
                 },
                 filter,
                 material
-                ),             
+                );
+
+                // Cache it and track for disposal
+                colliderCache.Add(currentSoldierType, colliderBlob);
+                _allocatedColliders.Add(colliderBlob);
+            }
+
+            eManager.SetComponentData(formation, new PhysicsCollider
+            {
+                Value = colliderBlob
             });
 
             eManager.SetComponentData(formation, new FormationEngagementData
@@ -172,12 +205,12 @@ public partial struct BattleSetupSystem : ISystem
                 centerPosition = spawnPosition,
                 targetPosition = spawnPosition,
                 facing = (quaternion.identity),
-                targetFacing = (quaternion.identity), 
+                targetFacing = (quaternion.identity),
                 facingTolerance = .1f,
                 spacing = detSpacing,
                 columns = columns,
                 soldierCount = soldiersPerFormation,
-                formationState = FormationState.rebuilding 
+                formationState = FormationState.rebuilding
             });
 
             eManager.SetComponentData(formation, new FormationMovementData
@@ -191,7 +224,7 @@ public partial struct BattleSetupSystem : ISystem
                 currentAnimation = 0,
                 animationFrame = 0,
                 animationTimer = 0,
-                soldierType = currentSoldierType, 
+                soldierType = currentSoldierType,
                 renderMaterial = setupData.playerMaterial
             });
 
@@ -209,7 +242,7 @@ public partial struct BattleSetupSystem : ISystem
     }
 
 
-    public void SpawnAIArmy(ref SystemState state, BattleSetupData setupData, Entity setupEntity, NativeArray<FixedString32Bytes> soldierType)
+    public void SpawnAIArmy(ref SystemState state, BattleSetupData setupData, Entity setupEntity, NativeArray<FixedString32Bytes> soldierType, ref NativeHashMap<FixedString32Bytes, BlobAssetReference<Collider>> colliderCache)
     {
         var eManager = state.EntityManager;
 
@@ -283,10 +316,9 @@ public partial struct BattleSetupSystem : ISystem
             }
 
             float estRows = (setupData.soldiersPerSide / columns) + 1;
-            float singleFormationDepth = estRows * detSpacing - detSpacing;
+            float singleFormationDepth = estRows * detSpacing - detSpacing;     
             float exactSingleFormWidth = (columns - 1) * detSpacing;
 
-            // Corrected to Local Space (0,0,0) instead of World Space (spawnPosition)
             float3 colliderCenter = new float3(0, .9f, -singleFormationDepth / 2);
 
             #endregion
@@ -315,15 +347,34 @@ public partial struct BattleSetupSystem : ISystem
                 material = material
             });
 
-            eManager.SetComponentData(formation, new PhysicsCollider
+            // Check cache for existing collider blob
+            // Note: AI might need different filter/material, so we might need a different key or just create new ones if they differ significantly.
+            // However, in your code, the geometry is identical, only the filter differs.
+            // BoxCollider.Create bakes the filter into the blob. So we need a unique key for AI vs Player if filters differ.
+            
+            FixedString32Bytes cacheKey = currentSoldierType;
+            cacheKey.Append(new FixedString32Bytes("_AI")); // Differentiate AI colliders due to different Filter
+
+            if (!colliderCache.TryGetValue(cacheKey, out BlobAssetReference<Unity.Physics.Collider> colliderBlob))
             {
-                Value = Unity.Physics.BoxCollider.Create(new BoxGeometry
+                colliderBlob = Unity.Physics.BoxCollider.Create(new BoxGeometry
                 {
                     Center = colliderCenter,
                     Size = new float3(exactSingleFormWidth, 2f, singleFormationDepth),
                     Orientation = quaternion.identity,
                     BevelRadius = 0.05f
-                }),
+                },
+                filter, // AI Filter
+                material
+                );
+
+                colliderCache.Add(cacheKey, colliderBlob);
+                _allocatedColliders.Add(colliderBlob);
+            }
+
+            eManager.SetComponentData(formation, new PhysicsCollider
+            {
+                Value = colliderBlob,
             });
 
             eManager.SetComponentData(formation, new FormationEngagementData
@@ -375,7 +426,6 @@ public partial struct BattleSetupSystem : ISystem
         }
     }
 }
-
 
 public static class FormationPhysics
 {
