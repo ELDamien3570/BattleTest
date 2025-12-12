@@ -1,10 +1,9 @@
-using System.Diagnostics;
 using Unity.Entities;
 using Unity.Mathematics;
-using Unity.Transforms;
-using UnityEngine;
 using Unity.Collections;
-using JetBrains.Annotations;
+using Unity.Physics;
+using UnityEditor.Search;
+using Unity.Transforms;
 
 
 [UpdateInGroup(typeof(InitializationSystemGroup))]
@@ -38,7 +37,7 @@ public partial struct BattleSetupSystem : ISystem
 
 
         SpawnPlayerArmy(ref state, battleSetupData, battleSetupEntity, soldierTypesCopy);
-
+        //SpawnAIArmy(ref state, battleSetupData, battleSetupEntity, soldierTypesCopy);
         state.Enabled = false; 
     }
 
@@ -46,28 +45,16 @@ public partial struct BattleSetupSystem : ISystem
     {
         var eManager = state.EntityManager;
 
-        // Get the soldier type buffer
-        
-
-        // Configuration for multiple formations
-        int formationCount = setupData.formationPreSide; // Number of formations to spawn
-        float formationGap = 2f; // Space between formations
-        float soldierSpacing = 1f; // Should match the spacing used in FormationBuilderUtility
+        int formationCount = setupData.formationPreSide; 
+        float formationGap = 2f; 
+        float soldierSpacing = 2f; 
 
         int soldiersPerFormation = setupData.soldiersPerSide;
         int columns = FormationBuilderUtility.CalculateSquareGridColumns(soldiersPerFormation);
         
-        // Calculate the physical width of one formation
-        // Width = (columns - 1) * spacing
-        float singleFormationWidth = (columns - 1) * soldierSpacing;
-
-        // Calculate the total width of the entire army line
+        float singleFormationWidth = (columns - 1) * soldierSpacing + 1f;
         float totalArmyWidth = (singleFormationWidth * formationCount) + (formationGap * (formationCount - 1));
-
-        // Calculate the starting X offset (leftmost edge relative to center)
         float startXOffset = -totalArmyWidth * 0.5f;
-
-        // The center of the first formation is: StartEdge + HalfFormationWidth
         float currentXOffset = startXOffset + (singleFormationWidth * 0.5f);
 
         for (int i = 0; i < formationCount; i++)
@@ -75,26 +62,25 @@ public partial struct BattleSetupSystem : ISystem
             Entity formation = eManager.CreateEntity(
                 typeof(FormationPositionData),
                 typeof(FormationMovementData),
-                typeof(FormationRenderData)
+                typeof(FormationRenderData),
+                typeof(FormationCombatData),
+                typeof(PlayerControlled),
+                typeof(LocalTransform),
+                typeof(PhysicsCollider),
+                typeof(FormationColliderData)
             );
 
-            // Calculate position for this specific formation
             float3 spawnPosition = setupData.playerStartLocation;
             spawnPosition.x += currentXOffset;
 
-            // Determine soldier type for this formation
-            FixedString32Bytes currentSoldierType = "player"; // Default fallback
+            FixedString32Bytes currentSoldierType = "player"; 
             if (soldierType.Length > 0)
             {
-                // Cycle through types if we have more formations than types
                 int typeIndex = i % soldierType.Length;
                 currentSoldierType = soldierType[typeIndex];
-                UnityEngine.Debug.Log(currentSoldierType);
             }
 
-
-
-            #region Decide Troop Type from current Soldier Type string
+            #region Determine troop type info from formation troop type
 
             int detTroopType = 0;
             float detSpacing = 1;
@@ -103,7 +89,7 @@ public partial struct BattleSetupSystem : ISystem
             if (currentSoldierType.Contains(new FixedString32Bytes("Infantry")))
             {
                 detTroopType = 0;
-                detSpacing = 1;
+                detSpacing = 2f;
                 detMoveSpeed = 7;
             }
             else if (currentSoldierType.Contains(new FixedString32Bytes("Archer")))
@@ -115,19 +101,56 @@ public partial struct BattleSetupSystem : ISystem
             else if (currentSoldierType.Contains(new FixedString32Bytes("Cavalry")))
             {
                 detTroopType = 2;
-                detSpacing = 2f;
-                detMoveSpeed = 11;
+                detSpacing = 3.5f;
+                detMoveSpeed = 13;
             }
             else if (currentSoldierType.Contains(new FixedString32Bytes("CavArcher")))
             {
                 detTroopType = 3;
-                detSpacing = 2.5f;
-                detMoveSpeed = 10;
+                detSpacing = 3f;
+                detMoveSpeed = 15;
             }
 
+            float estRows = (setupData.soldiersPerSide / columns) + 1;
+            float singleFormationDepth = estRows * detSpacing - detSpacing;
+            float exactSingleFormWidth = (columns - 1) * detSpacing;
 
+
+            float3 colliderCenter = new float3(0, .9f, -singleFormationDepth / 2);
 
             #endregion
+
+            eManager.SetComponentData(formation, LocalTransform.FromPositionRotation(spawnPosition, quaternion.identity));
+
+            eManager.SetComponentData(formation, new FormationColliderData
+            {
+                lastColumns = columns,
+                lastSoldierCount = soldiersPerFormation,
+                spacing = detSpacing,
+                needsRebuilt = true,
+                filter = new CollisionFilter
+                {
+                    BelongsTo = PhysicsLayers.Formations,
+                    CollidesWith = PhysicsLayers.Formations,
+                    GroupIndex = 0
+                },
+                material = new Unity.Physics.Material
+                {
+                   CollisionResponse = CollisionResponsePolicy.RaiseTriggerEvents
+                }
+            });
+
+            eManager.SetComponentData(formation, new PhysicsCollider
+            {
+                Value = Unity.Physics.BoxCollider.Create(new BoxGeometry
+                {
+                    Center = colliderCenter,
+                    Size = new float3(exactSingleFormWidth, 2f, singleFormationDepth),
+                    Orientation = quaternion.identity,
+                    BevelRadius = 0.05f
+                }),
+            });
+
 
             eManager.SetComponentData(formation, new FormationPositionData
             {
@@ -139,8 +162,7 @@ public partial struct BattleSetupSystem : ISystem
                 spacing = detSpacing,
                 columns = columns,
                 soldierCount = soldiersPerFormation,
-                formationState = FormationState.rebuilding ,
-                troopType = detTroopType
+                formationState = FormationState.rebuilding 
             });
 
             eManager.SetComponentData(formation, new FormationMovementData
@@ -154,13 +176,185 @@ public partial struct BattleSetupSystem : ISystem
                 currentAnimation = 0,
                 animationFrame = 0,
                 animationTimer = 0,
-                soldierType = currentSoldierType // Set the type from buffer
+                soldierType = currentSoldierType, 
+                renderMaterial = setupData.playerMaterial
+            });
+
+            eManager.SetComponentData(formation, new FormationCombatData
+            {
+                meleeDamage = 5,
+                meleeDefense = 5,
+                troopType = detTroopType
             });
 
             eManager.AddBuffer<SoldierOffset>(formation);
 
-            // Advance offset for the next formation
             currentXOffset += singleFormationWidth + formationGap;
         }
     }
+
+
+    public void SpawnAIArmy(ref SystemState state, BattleSetupData setupData, Entity setupEntity, NativeArray<FixedString32Bytes> soldierType)
+    {
+        var eManager = state.EntityManager;
+
+        int formationCount = setupData.formationPreSide;
+        float formationGap = 2f;
+        float soldierSpacing = 2f;
+
+        int soldiersPerFormation = setupData.soldiersPerSide;
+        int columns = FormationBuilderUtility.CalculateSquareGridColumns(soldiersPerFormation);
+
+        float singleFormationWidth = (columns - 1) * soldierSpacing + 1f;
+        float totalArmyWidth = (singleFormationWidth * formationCount) + (formationGap * (formationCount - 1));
+        float startXOffset = -totalArmyWidth * 0.5f;
+        float currentXOffset = startXOffset + (singleFormationWidth * 0.5f);
+
+        for (int i = 0; i < formationCount; i++)
+        {
+            Entity formation = eManager.CreateEntity(
+                typeof(FormationPositionData),
+                typeof(FormationMovementData),
+                typeof(FormationRenderData),
+                typeof(FormationCombatData),
+                typeof(PlayerControlled),
+                typeof(LocalTransform),
+                typeof(PhysicsCollider),
+                typeof(FormationColliderData)
+            );
+
+            float3 spawnPosition = setupData.playerStartLocation;
+            spawnPosition.x += currentXOffset;
+
+            FixedString32Bytes currentSoldierType = "player";
+            if (soldierType.Length > 0)
+            {
+                int typeIndex = i % soldierType.Length;
+                currentSoldierType = soldierType[typeIndex];
+            }
+
+            #region Determine troop type info from formation troop type
+
+            int detTroopType = 0;
+            float detSpacing = 1;
+            float detMoveSpeed = 5;
+
+            if (currentSoldierType.Contains(new FixedString32Bytes("Infantry")))
+            {
+                detTroopType = 0;
+                detSpacing = 2f;
+                detMoveSpeed = 7;
+            }
+            else if (currentSoldierType.Contains(new FixedString32Bytes("Archer")))
+            {
+                detTroopType = 1;
+                detSpacing = 1.5f;
+                detMoveSpeed = 6;
+            }
+            else if (currentSoldierType.Contains(new FixedString32Bytes("Cavalry")))
+            {
+                detTroopType = 2;
+                detSpacing = 3.5f;
+                detMoveSpeed = 13;
+            }
+            else if (currentSoldierType.Contains(new FixedString32Bytes("CavArcher")))
+            {
+                detTroopType = 3;
+                detSpacing = 3f;
+                detMoveSpeed = 15;
+            }
+
+            float estRows = (setupData.soldiersPerSide / columns) + 1;
+            float singleFormationDepth = estRows * detSpacing - detSpacing;
+            float exactSingleFormWidth = (columns - 1) * detSpacing;
+
+
+            float3 colliderCenter = new float3(0, .9f, -singleFormationDepth / 2);
+
+            #endregion
+
+            eManager.SetComponentData(formation, LocalTransform.FromPositionRotation(spawnPosition, quaternion.identity));
+
+            eManager.SetComponentData(formation, new FormationColliderData
+            {
+                lastColumns = columns,
+                lastSoldierCount = soldiersPerFormation,
+                spacing = detSpacing,
+                needsRebuilt = true,
+                filter = new CollisionFilter
+                {
+                    BelongsTo = PhysicsLayers.Formations,
+                    CollidesWith = PhysicsLayers.Formations,
+                    GroupIndex = 1
+                },
+                material = new Unity.Physics.Material
+                {
+                    CollisionResponse = CollisionResponsePolicy.RaiseTriggerEvents
+                }
+            });
+
+            eManager.SetComponentData(formation, new PhysicsCollider
+            {
+                Value = Unity.Physics.BoxCollider.Create(new BoxGeometry
+                {
+                    Center = colliderCenter,
+                    Size = new float3(exactSingleFormWidth, 2f, singleFormationDepth),
+                    Orientation = quaternion.identity,
+                    BevelRadius = 0.05f
+                }),
+            });
+
+
+            eManager.SetComponentData(formation, new FormationPositionData
+            {
+                centerPosition = spawnPosition,
+                targetPosition = spawnPosition,
+                facing = quaternion.identity,
+                targetFacing = quaternion.identity,
+                facingTolerance = .1f,
+                spacing = detSpacing,
+                columns = columns,
+                soldierCount = soldiersPerFormation,
+                formationState = FormationState.rebuilding
+            });
+
+            eManager.SetComponentData(formation, new FormationMovementData
+            {
+                moveSpeed = detMoveSpeed,
+                rotationSpeed = math.radians(180f) / 2f
+            });
+
+            eManager.SetComponentData(formation, new FormationRenderData
+            {
+                currentAnimation = 0,
+                animationFrame = 0,
+                animationTimer = 0,
+                soldierType = currentSoldierType,
+                renderMaterial = setupData.aiMaterial
+            });
+
+            eManager.SetComponentData(formation, new FormationCombatData
+            {
+                meleeDamage = 5,
+                meleeDefense = 5,
+                troopType = detTroopType
+            });
+
+            eManager.AddBuffer<SoldierOffset>(formation);
+
+            currentXOffset += singleFormationWidth + formationGap;
+        }
+    }
+}
+
+
+
+public static class PhysicsLayers
+{
+    public const uint Nothing = 0;
+
+    public const uint Formations = 1u << 8;
+    public const uint Projectile = 1u << 10;
+
+    public const uint Everything = ~0u;
 }

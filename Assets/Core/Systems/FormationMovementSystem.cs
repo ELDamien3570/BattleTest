@@ -1,8 +1,5 @@
-using Unity.Burst;
 using Unity.Entities;
 using Unity.Mathematics;
-using Unity.Collections;
-using UnityEngine;
 
 public partial struct FormationMovementSystem : ISystem
 {
@@ -47,7 +44,7 @@ public partial struct FormationMovementSystem : ISystem
 
                 float angleDiff = QuaternionAngle(positionData.ValueRO.facing, positionData.ValueRO.targetFacing);
                 
-                if (angleDiff < 0.05f)
+                if (angleDiff < positionData.ValueRO.facingTolerance) //review later
                 {
                     quaternion snapDelta = math.mul(positionData.ValueRW.targetFacing, math.inverse(positionData.ValueRW.facing));
                     quaternion inverseSnap = math.inverse(snapDelta);

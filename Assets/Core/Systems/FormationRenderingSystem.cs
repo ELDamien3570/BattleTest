@@ -6,15 +6,12 @@ using UnityEngine;
 
 public partial struct FormationRenderSystem : ISystem
 {
-    private static Dictionary<string, (AnimatedMeshScriptableObject so, Material mat)> playerCache;
-    private static Dictionary<string, (AnimatedMeshScriptableObject so, Material mat)> aiCache;
+    private static Dictionary<string, (AnimatedMeshScriptableObject so, Material mat)> renderCache;
 
     public void OnCreate(ref SystemState state)
     {
-        if (playerCache == null)
-            playerCache = new Dictionary<string, (AnimatedMeshScriptableObject, Material)>();
-        if (aiCache == null)
-            aiCache = new Dictionary<string, (AnimatedMeshScriptableObject, Material)>();
+        if (renderCache == null)
+            renderCache = new Dictionary<string, (AnimatedMeshScriptableObject, Material)>();
     }
 
     public void OnUpdate(ref SystemState state)
@@ -34,20 +31,25 @@ public partial struct FormationRenderSystem : ISystem
             
             if (offsets.Length == 0) continue;
 
-            string key = renderData.ValueRO.soldierType.ToString();
+            string meshName = renderData.ValueRO.soldierType.ToString();
+            string matName = renderData.ValueRO.renderMaterial.ToString();
 
-            if (!playerCache.TryGetValue(key, out var data))
+            string cacheKey = $"{meshName}_{matName}";
+
+            if (!renderCache.TryGetValue(cacheKey, out var data))
             {
-                AnimatedMeshScriptableObject so = Resources.Load<AnimatedMeshScriptableObject>($"meshes/{key}");
-                Material mat = Resources.Load<Material>($"materials/{key}");
+                AnimatedMeshScriptableObject so = Resources.Load<AnimatedMeshScriptableObject>($"meshes/{meshName}");
+                Material mat = Resources.Load<Material>($"materials/{matName}");
 
                 if (so == null || mat == null)
                 {
+                    if(so == null) return;
+                    if(mat == null) return;
                     continue;
                 }
 
                 data = (so, mat);
-                playerCache[key] = data;
+                renderCache[cacheKey] = data;
             }
 
             var playerMeshes = data.so;

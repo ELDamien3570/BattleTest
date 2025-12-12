@@ -1,7 +1,7 @@
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
-using Unity.Rendering;
+using Unity.Physics;
 
 public struct FormationPositionData : IComponentData
 {
@@ -23,9 +23,9 @@ public struct FormationPositionData : IComponentData
     //State
     public FormationState formationState;
     
-    // Add blend progress
+    //blend progress
     public float formationBlendProgress;
-    public int troopType; //0 = infantry, 1 = archer, 2 = cav, 3 = cav archer
+    
 }
 
 public struct FormationMovementData : IComponentData
@@ -34,31 +34,55 @@ public struct FormationMovementData : IComponentData
     public float rotationSpeed;
 }
 
-public struct FormationRenderData : IComponentData
+public struct FormationCombatData : IComponentData
 {
-    public int currentAnimation;       // 0 = idle, 1 = walk
-    public int animationFrame;
-    public float animationTimer;
-    public FixedString64Bytes soldierType;
+    public int troopType; //0 = infantry, 1 = archer, 2 = cav, 3 = cav archer
+
+    public int meleeDamage;
+    public int meleeDefense;
 }
 
-public enum FormationState
+public struct FormationRenderData : IComponentData
 {
-    rebuilding,    // Trigger state: Calculates new positions once, then transitions
-    rotating,      // Rotating to face target direction
-    reshaping,     // Moving soldiers to new local offsets
-    retargeting,   // Moving the whole formation center to target
-    idle
-}      
+    public int currentAnimation;       //0 = idle, 1 = walk, 2 = combat
+    public int animationFrame;
+    public float animationTimer;
+    public FixedString32Bytes soldierType;
+    public FixedString32Bytes renderMaterial;
+}
+
+public struct FormationColliderData : IComponentData
+{
+    public int lastColumns;
+    public int lastSoldierCount;
+    public float spacing;
+    public bool needsRebuilt;
+    public CollisionFilter filter;
+    public Material material;
+    
+}
 
 public struct SoldierOffset : IBufferElementData
 {
     public float3 currentOffset;
     public float3 targetOffset; 
     public quaternion facing;
-    public bool isMoving; 
+    public bool isMoving;
+    public bool isEngaged;
     public float speedModifier;
 }
+public enum FormationState
+{
+    rebuilding,    //calculating troop offsets
+    rotating,      //rotating to face target
+    reshaping,     //moving soldiers to new offsets
+    retargeting,   //moving formation center
+    idle
+}
 
-// NEW: Tag component for selection
+
+//tag components
 public struct FormationSelected : IComponentData { }
+public struct PlayerControlled : IComponentData { }
+public struct AiControlled : IComponentData { }
+

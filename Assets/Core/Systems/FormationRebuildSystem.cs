@@ -15,7 +15,7 @@ public partial struct FormationRebuildSystem : ISystem
 
                 float angleDiff = QuaternionAngle(group.ValueRO.facing, group.ValueRO.targetFacing);
                 
-                if (angleDiff > 0.1f) 
+                if (angleDiff > group.ValueRO.facingTolerance) 
                 {
                     group.ValueRW.formationState = FormationState.rotating;
                 }

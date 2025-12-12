@@ -12,7 +12,7 @@ public partial class PlayerInputSystem : SystemBase
     private float3 dragStartPoint;
     private float3 dragCurrentPoint;
     private int currentSoldierCount = 0;
-    private float currentSpacing = 1f; // Default spacing
+    private float currentSpacing = 1f; 
     
     private const float DragDistanceThreshold = 0.5f; 
     private const double DragTimeThreshold = 0.20; 
@@ -28,23 +28,21 @@ public partial class PlayerInputSystem : SystemBase
         {
             var go = new GameObject("Formation Preview Visualizer");
             previewVisualizer = go.AddComponent<FormationPreviewVisualizer>();
-            UnityEngine.Debug.Log("Created FormationPreviewVisualizer automatically");
         }
     }
 
     protected override void OnUpdate()
     {
-        // Update soldier count and spacing from the SELECTED formation
         currentSoldierCount = 0;
         foreach (var group in SystemAPI.Query<RefRO<FormationPositionData>>().WithAll<FormationSelected>())
         {
             currentSoldierCount = group.ValueRO.soldierCount;
-            currentSpacing = group.ValueRO.spacing; // Capture spacing
+            currentSpacing = group.ValueRO.spacing; 
 
             if (previewVisualizer != null) 
             {
                 previewVisualizer.SoldierCount = currentSoldierCount;
-                previewVisualizer.spacing = currentSpacing; // Update visualizer
+                previewVisualizer.spacing = currentSpacing; 
             }
             break; 
         }
@@ -52,7 +50,6 @@ public partial class PlayerInputSystem : SystemBase
         Camera cam = Camera.main;
         if (cam == null) return;
 
-        // ... (Left Click Selection Logic remains the same) ...
         if (Input.GetMouseButtonDown(0))
         {
             Ray ray = cam.ScreenPointToRay(Input.mousePosition);
@@ -67,13 +64,13 @@ public partial class PlayerInputSystem : SystemBase
                 Entity closestEntity = Entity.Null;
                 float closestDist = float.MaxValue;
 
-                foreach (var (pos, entity) in SystemAPI.Query<RefRO<FormationPositionData>>().WithEntityAccess())
+                foreach (var (pos, playerForm, entity) in SystemAPI.Query<RefRO<FormationPositionData>, RefRO<PlayerControlled>>().WithEntityAccess())
                 {
                     float dist = math.distance(new float2(pos.ValueRO.centerPosition.x, pos.ValueRO.centerPosition.z), new float2(hit.point.x, hit.point.z));
                     
                     int rows = (int)math.ceil((float)pos.ValueRO.soldierCount / pos.ValueRO.columns);
-                    float width = pos.ValueRO.columns * pos.ValueRO.spacing; // Use spacing
-                    float depth = rows * pos.ValueRO.spacing; // Use spacing
+                    float width = pos.ValueRO.columns * pos.ValueRO.spacing;
+                    float depth = rows * pos.ValueRO.spacing;
                     float formationRadius = math.length(new float2(width, depth)) * 0.6f; 
                     
                     float selectionThreshold = math.max(3.0f, formationRadius);
@@ -88,11 +85,9 @@ public partial class PlayerInputSystem : SystemBase
                 if (closestEntity != Entity.Null)
                 {
                     ecb.AddComponent<FormationSelected>(closestEntity);
-                    UnityEngine.Debug.Log($"Selected formation at {hit.point}");
                 }
                 else
                 {
-                    UnityEngine.Debug.Log("Selection cleared");
                 }
 
                 ecb.Playback(EntityManager);
@@ -100,7 +95,6 @@ public partial class PlayerInputSystem : SystemBase
             }
         }
 
-        // ... (Right Click Down/Hold Logic remains the same) ...
         if (Input.GetMouseButtonDown(1))
         {
             Ray ray = cam.ScreenPointToRay(Input.mousePosition);
@@ -135,7 +129,7 @@ public partial class PlayerInputSystem : SystemBase
                                 previewVisualizer.DragStart = dragStartPoint;
                             previewVisualizer.DragEnd = dragCurrentPoint;
                             previewVisualizer.SoldierCount = currentSoldierCount;
-                            previewVisualizer.spacing = currentSpacing; // Ensure spacing is set
+                            previewVisualizer.spacing = currentSpacing;
                         }
                     }
                 }
@@ -149,7 +143,6 @@ public partial class PlayerInputSystem : SystemBase
             }
         }
 
-        // --- UP: Execute Command ---
         if (Input.GetMouseButtonUp(1))
         {
             Ray ray = cam.ScreenPointToRay(Input.mousePosition);
@@ -177,7 +170,7 @@ public partial class PlayerInputSystem : SystemBase
 
     private void ExecuteMoveCommand(float3 targetPos)
     {
-        foreach (var group in SystemAPI.Query<RefRW<FormationPositionData>>().WithAll<FormationSelected>())
+        foreach (var (group, colliderData) in SystemAPI.Query<RefRW<FormationPositionData>, RefRW<FormationColliderData>>().WithAll<FormationSelected>())
         {
             group.ValueRW.targetPosition = targetPos;
             
@@ -189,16 +182,17 @@ public partial class PlayerInputSystem : SystemBase
             
             float angleDiff = QuaternionAngle(group.ValueRO.facing, group.ValueRW.targetFacing);
             
-            if (angleDiff > 0.7f)
+            if (angleDiff > group.ValueRO.facingTolerance)
             {
                 group.ValueRW.formationState = FormationState.rotating;
+                colliderData.ValueRW.needsRebuilt = true;
             }
             else
             {
                 group.ValueRW.formationState = FormationState.retargeting;
+                colliderData.ValueRW.needsRebuilt = true;
             }
             
-            UnityEngine.Debug.Log($"Move command issued to {targetPos}");
         }
     }
 
@@ -217,17 +211,15 @@ public partial class PlayerInputSystem : SystemBase
             float3 forwardVec = new float3(-rightVec.z, 0, rightVec.x);
             quaternion facing = quaternion.LookRotationSafe(forwardVec, math.up());
 
-            // Use currentSpacing for calculation
             int newColumns = FormationBuilderUtility.CalculateColumnsFromWidth(width, currentSpacing);
 
-            foreach (var group in SystemAPI.Query<RefRW<FormationPositionData>>().WithAll<FormationSelected>())
+            foreach (var (group, colliderData) in SystemAPI.Query<RefRW<FormationPositionData>, RefRW<FormationColliderData>>().WithAll<FormationSelected>())
             {
                 group.ValueRW.columns = newColumns;
                 group.ValueRW.targetFacing = facing;
                 group.ValueRW.targetPosition = center;
                 group.ValueRW.formationState = FormationState.rebuilding;
-
-                UnityEngine.Debug.Log($"Reform command issued: {newColumns} cols at {center}");
+                colliderData.ValueRW.needsRebuilt = true;
             }
         }
     }
