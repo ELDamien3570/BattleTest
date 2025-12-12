@@ -112,41 +112,65 @@ struct ProcessEngagementsJob : ITriggerEventsJob
         float engagementDistSq)
     {
         bool anyEngaged = false;
-        float3 lineStart = enemyFrontCenter - enemyRight * enemyHalfWidth;
-        float3 lineEnd = enemyFrontCenter + enemyRight * enemyHalfWidth;
+
+        // --- OPTIMIZATION START ---
+        
+        // 1. Calculate World Space Line
+        float3 lineStartWorld = enemyFrontCenter - enemyRight * enemyHalfWidth;
+        float3 lineEndWorld = enemyFrontCenter + enemyRight * enemyHalfWidth;
+
+        // 2. Transform Enemy Line into THIS Formation's Local Space
+        // This allows us to compare against soldier.currentOffset directly, avoiding 
+        // a matrix rotation for every single soldier in the loop.
+        quaternion inverseRot = math.inverse(pos.facing);
+        float3 localLineStart = math.rotate(inverseRot, lineStartWorld - pos.centerPosition);
+        float3 localLineEnd = math.rotate(inverseRot, lineEndWorld - pos.centerPosition);
+
+        // 3. Pre-calculate Line Segment Math
+        float3 lineVec = localLineEnd - localLineStart;
+        float lineLenSq = math.lengthsq(lineVec);
+        float invLineLenSq = (lineLenSq > 0.0001f) ? 1.0f / lineLenSq : 0.0f;
+
+        // 4. Calculate AABB Bounds for fast culling
+        // We only check soldiers that are within the bounding box of the enemy line + engagement distance.
+        // This effectively skips all soldiers in the back rows.
+        float engagementDist = math.sqrt(engagementDistSq);
+        
+        float minZ = math.min(localLineStart.z, localLineEnd.z) - engagementDist;
+        float maxZ = math.max(localLineStart.z, localLineEnd.z) + engagementDist;
+        float minX = math.min(localLineStart.x, localLineEnd.x) - engagementDist;
+        float maxX = math.max(localLineStart.x, localLineEnd.x) + engagementDist;
 
         for (int i = 0; i < offsets.Length; i++)
         {
             var soldier = offsets[i];
-            float3 worldPos = pos.centerPosition + math.rotate(pos.facing, soldier.currentOffset);
+            float3 p = soldier.currentOffset;
 
-            float distToLine = DistanceToLineSegmentSq(worldPos, lineStart, lineEnd);
+            // Fast AABB Cull
+            if (p.z < minZ || p.z > maxZ || p.x < minX || p.x > maxX)
+                continue;
 
-            if (distToLine < engagementDistSq)
+            // Inlined DistanceToLineSegmentSq (Local Space)
+            float3 toPoint = p - localLineStart;
+            float t = math.dot(toPoint, lineVec) * invLineLenSq;
+            t = math.clamp(t, 0f, 1f);
+            
+            float3 closestPoint = localLineStart + t * lineVec;
+            float3 diff = p - closestPoint;
+            
+            // Only considering X and Z distance as per original logic
+            float distSq = diff.x * diff.x + diff.z * diff.z;
+
+            if (distSq < engagementDistSq)
             {
                 soldier.isEngaged = true;
                 offsets[i] = soldier;
                 anyEngaged = true;
             }
         }
+        // --- OPTIMIZATION END ---
 
         return anyEngaged;
-    }
-
-    private float DistanceToLineSegmentSq(float3 point, float3 lineStart, float3 lineEnd)
-    {
-        float3 line = lineEnd - lineStart;
-        float3 toPoint = point - lineStart;
-
-        float lineLengthSq = math.lengthsq(line);
-        if (lineLengthSq < 0.0001f)
-            return math.lengthsq(toPoint);
-
-        float t = math.saturate(math.dot(toPoint, line) / lineLengthSq);
-        float3 closestPoint = lineStart + t * line;
-
-        float3 diff = point - closestPoint;
-        return diff.x * diff.x + diff.z * diff.z;
     }
 }
 
