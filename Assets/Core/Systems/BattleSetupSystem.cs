@@ -294,7 +294,7 @@ public partial struct BattleSetupSystem : ISystem
             data.healthPerTroop = 800;
             data.damage = 10;
             data.defense = 4;
-            data.attackDepth = 0.4f;
+            data.attackDepth = 0.8f;
         }
 
         int rows = (int)math.ceil((float)soldierCount / columns);

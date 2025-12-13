@@ -12,12 +12,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f4b36f3eba2f0cc42ba3190856480629, type: 3}
   m_Name: Desert
   m_EditorClassIdentifier: 
-  baseLayer: {fileID: 8574412962073106934, guid: 1ded3ba1c5a90054e8f23ddfa62fb2b7,
-    type: 2}
+  baseLayer: {fileID: 8574412962073106934, guid: 1ded3ba1c5a90054e8f23ddfa62fb2b7, type: 2}
   terrainLayers:
-  - layer: {fileID: 8574412962073106934, guid: c997c17aa360cb749a27932fe3bdfcce, type: 2}
+  - layer: {fileID: 8574412962073106934, guid: e14e7bc8b2b584d42a181446ec0f2a28, type: 2}
     smoothness: 0
-    minAngle: 20.1
+    minAngle: 4.9
     maxAngle: 90
     invertAngleMask: 0
     heightRange:
@@ -28,7 +27,7 @@ MonoBehaviour:
     invertRoughnessMask: 0
     noiseScale: 15
     noiseMagnitude: 15
-  - layer: {fileID: 8574412962073106934, guid: 73f0b5ac607c28d4696a6dd09a1de66a, type: 2}
+  - layer: {fileID: 8574412962073106934, guid: c1bf98559de26154489987b189c59eab, type: 2}
     smoothness: 0.293
     minAngle: 3
     maxAngle: 5
@@ -41,7 +40,7 @@ MonoBehaviour:
     invertRoughnessMask: 1
     noiseScale: 50
     noiseMagnitude: 0
-  - layer: {fileID: 8574412962073106934, guid: 0cbb01b61ed524a48a119d81aa262fed, type: 2}
+  - layer: {fileID: 8574412962073106934, guid: 795e383430200a14bb52726e97a0e7f4, type: 2}
     smoothness: 0.638
     minAngle: 0
     maxAngle: 15

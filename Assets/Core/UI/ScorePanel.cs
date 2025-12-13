@@ -20,6 +20,11 @@ public class ScorePanel : MonoBehaviour
     {
         entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
         stateQuery = entityManager.CreateEntityQuery(ComponentType.ReadOnly<BattleStateData>());
+
+        // Ensure panels are hidden at start
+        if (WinPanel) WinPanel.SetActive(false);
+        if (LostPanel) LostPanel.SetActive(false);
+        if (scorePanel) scorePanel.SetActive(true);
     }
 
     private void Update()
@@ -27,6 +32,7 @@ public class ScorePanel : MonoBehaviour
         if (stateQuery.IsEmpty) return;
 
         var state = stateQuery.GetSingleton<BattleStateData>();
+
 
         playerFormText.text = state.playerFormations.ToString();
         playerTroopText.text = state.playerTroops.ToString();

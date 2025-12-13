@@ -1,15 +1,19 @@
 using Unity.Entities;
 using Unity.Burst;
 
-[UpdateInGroup(typeof(SimulationSystemGroup))]
+[UpdateInGroup(typeof(PresentationSystemGroup))]
 public partial struct BattleStateSystem : ISystem
 {
+    // Add a local field to track if we've seen the battle start
+    private bool _battleStarted;
+
     public void OnCreate(ref SystemState state)
     {
         var entity = state.EntityManager.CreateEntity();
         state.EntityManager.AddComponentData(entity, new BattleStateData());
         
         state.RequireForUpdate<BattleStateData>();
+        _battleStarted = false;
     }
 
     [BurstCompile]
@@ -39,7 +43,18 @@ public partial struct BattleStateSystem : ISystem
         stateData.ValueRW.aiTroops = aTroops;
         stateData.ValueRW.aiFormations = aFormations;
 
-        if (pTroops == 0 || pFormations ==0) { stateData.ValueRW.playerDead = true; }
-        if (aTroops == 0 || aFormations == 0) { stateData.ValueRW.aiDead = true; }  
+        // Only check for defeat if the battle has actually started (units have spawned)
+        if (!_battleStarted)
+        {
+            if (pTroops > 0 && aTroops > 0)
+            {
+                _battleStarted = true;
+            }
+        }
+        else
+        {
+            if (pTroops == 0 && pFormations == 0) { stateData.ValueRW.playerDead = true; }
+            if (aTroops == 0 && aFormations == 0) { stateData.ValueRW.aiDead = true; }
+        }
     }
 }

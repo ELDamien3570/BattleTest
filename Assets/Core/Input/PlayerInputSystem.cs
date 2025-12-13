@@ -156,7 +156,7 @@ public partial class PlayerInputSystem : SystemBase
 
         foreach (var (group, colliderData) in SystemAPI.Query<RefRW<FormationPositionData>, RefRW<FormationColliderData>>().WithAll<FormationSelected>())
         {
-            float3 targetPos = enemyPos.centerPosition + new float3(randomDepth, 0, enemyCenter * -group.ValueRO.desiredAttackDepth + randomDepth);
+            float3 targetPos = enemyPos.centerPosition + new float3(randomDepth, 0, enemyCenter * -group.ValueRO.desiredAttackDepth);
             group.ValueRW.targetPosition = targetPos;
 
             float3 directionToEnemy = enemyPos.centerPosition - group.ValueRO.centerPosition;

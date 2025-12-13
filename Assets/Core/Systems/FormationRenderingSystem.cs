@@ -25,6 +25,7 @@ public partial struct FormationRenderSystem : ISystem
 
     // Timing offsets (in seconds) for each group
     private static readonly float[] timingOffsets = { 0f, 0.11f, 0.35f, 0.6f };
+    private static Terrain activeTerrain;
 
     public void OnCreate(ref SystemState state)
     {
@@ -49,6 +50,9 @@ public partial struct FormationRenderSystem : ISystem
             {
                 deathMatrices[i] = new Matrix4x4[BatchSize];
             }
+
+            activeTerrain = Terrain.activeTerrain;
+
         }
     }
 
@@ -122,7 +126,20 @@ public partial struct FormationRenderSystem : ISystem
             {
                 float3 soldierWorldPos = positionData.ValueRO.centerPosition +
                     math.rotate(positionData.ValueRO.facing, offsets[i].currentOffset);
+
+                if (activeTerrain == null) {
+                    activeTerrain = Terrain.activeTerrain;
+
+                }
+
+                if (activeTerrain != null)
+                {
+                    soldierWorldPos.y = activeTerrain.SampleHeight(soldierWorldPos);
+                }
+
                 Matrix4x4 matrix = Matrix4x4.TRS(soldierWorldPos, offsets[i].facing, Vector3.one);
+
+
 
                 // Handle dead soldiers separately with individual timing
                 if (offsets[i].isDead)

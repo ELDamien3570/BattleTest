@@ -155,9 +155,9 @@ MonoBehaviour:
   playerMat: playerCavArcher
   aiMat: playerInfantry
   soldiersPerSide: 200
-  formationsPerSide: 5
-  playerStartLocation: {x: 2000, y: 0, z: 2000}
-  aiStartLocation: {x: 2000, y: 0, z: 2400}
+  formationsPerSide: 20
+  playerStartLocation: {x: 2000, y: 25, z: 1500}
+  aiStartLocation: {x: 2000, y: 25, z: 2400}
 --- !u!4 &667910218
 Transform:
   m_ObjectHideFlags: 0
