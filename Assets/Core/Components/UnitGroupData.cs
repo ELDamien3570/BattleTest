@@ -99,6 +99,12 @@ public enum FormationState
 
 
 //tag components
+
+public struct AiCommandData : IComponentData
+{
+    public float timeSinceCommand;
+}
+
 public struct FormationSelected : IComponentData { }
 public struct PlayerControlled : IComponentData { }
 public struct AiControlled : IComponentData { }

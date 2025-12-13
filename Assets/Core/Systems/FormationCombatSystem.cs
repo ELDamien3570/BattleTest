@@ -135,6 +135,7 @@ public partial struct DeadSoldierRemovalSystem : ISystem
         float deltaTime = SystemAPI.Time.DeltaTime;
         float deathAnimationDuration = 2f;
 
+        var ecb = new EntityCommandBuffer(Unity.Collections.Allocator.Temp);
         var bufferLookup = SystemAPI.GetBufferLookup<SoldierOffset>(false);
 
         foreach (var (positionData, colliderData, combatData, entity) in
@@ -161,6 +162,12 @@ public partial struct DeadSoldierRemovalSystem : ISystem
                 }
             }
 
+            if (offsets.Length == 0)
+            {
+                ecb.DestroyEntity(entity);
+                continue;
+            }
+
             if (needsRebuild)
             {
                 positionData.ValueRW.soldierCount = offsets.Length;
@@ -174,5 +181,7 @@ public partial struct DeadSoldierRemovalSystem : ISystem
                 colliderData.ValueRW.needsRebuilt = true;
             }
         }
+        ecb.Playback(state.EntityManager);
+        ecb.Dispose();
     }
 }

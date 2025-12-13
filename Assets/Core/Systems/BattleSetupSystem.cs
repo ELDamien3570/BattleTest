@@ -69,124 +69,148 @@ public partial struct BattleSetupSystem : ISystem
         int columns = FormationBuilderUtility.CalculateSquareGridColumns(soldiersPerFormation) + 10;
 
         float formationGap = 4f;
+        float rowGap = 10f;
         float3 startLocation = isPlayer ? setupData.playerStartLocation : setupData.aiStartLocation;
         FixedString32Bytes materialName = isPlayer ? setupData.playerMaterial : setupData.aiMaterial;
         CollisionFilter filter = isPlayer ? FormationPhysics.PlayerFilter : FormationPhysics.AIFilter;
 
-        var formationData = new NativeArray<TroopTypeData>(formationCount, Allocator.Temp);
-        float totalArmyWidth = 0f;
+        // Determine facing and Z-offset direction
+        // Player faces Forward (+Z), so "behind" is -Z.
+        // AI faces Backward (-Z), so "behind" is +Z.
+        quaternion armyFacing = isPlayer ? quaternion.identity : quaternion.RotateY(math.PI);
+        float zDirection = isPlayer ? -1f : 1f;
 
-        for (int i = 0; i < formationCount; i++)
+        // Define the rows
+        var rowTypes = new NativeArray<FixedString32Bytes>(3, Allocator.Temp);
+        rowTypes[0] = "Spearmen";
+        rowTypes[1] = "playerInfantry";
+        rowTypes[2] = "LightCavalry";
+        //rowTypes[3] = "HeavyCavalry";
+
+        float currentZ = startLocation.z;
+        float prevRowDepth = 0f;
+
+        for (int row = 0; row < rowTypes.Length; row++)
         {
-            FixedString32Bytes soldierType = GetSoldierType(soldierTypes, i);
-            formationData[i] = GetTroopTypeData(soldierType, soldiersPerFormation, columns);
-            totalArmyWidth += formationData[i].formationWidth;
-        }
-        totalArmyWidth += formationGap * (formationCount - 1);
+            FixedString32Bytes soldierType = rowTypes[row];
+            TroopTypeData data = GetTroopTypeData(soldierType, soldiersPerFormation, columns);
 
-        float currentX = -totalArmyWidth * 0.5f;
-
-        for (int i = 0; i < formationCount; i++)
-        {
-            var data = formationData[i];
-
-            float3 spawnPosition = startLocation;
-            spawnPosition.x += currentX + (data.formationWidth * 0.5f);
-            currentX += data.formationWidth + formationGap;
-
-            Entity formation = CreateFormationEntity(ref state, isPlayer);
-
-            float3 colliderCenter = new float3(0, 0.9f, -data.formationDepth * 0.5f);
-            FixedString32Bytes cacheKey = data.soldierType;
-            if (!isPlayer) cacheKey.Append("_AI");
-
-            if (!colliderCache.TryGetValue(cacheKey, out var colliderBlob))
+            // Calculate Z position for this row (offset from previous row)
+            if (row > 0)
             {
-                colliderBlob = BoxCollider.Create(new BoxGeometry
-                {
-                    Center = colliderCenter,
-                    Size = new float3(data.formationWidth, 2f, data.formationDepth),
-                    Orientation = quaternion.identity,
-                    BevelRadius = 0.05f
-                },
-                filter,
-                FormationPhysics.TriggerMaterial);
-
-                colliderCache.Add(cacheKey, colliderBlob);
-                _allocatedColliders.Add(colliderBlob);
+                float offset = (prevRowDepth * 0.5f) + rowGap + (data.formationDepth * 0.5f);
+                currentZ += offset * zDirection;
             }
 
-            eManager.SetComponentData(formation, LocalTransform.FromPositionRotation(spawnPosition, quaternion.identity));
-            eManager.SetSharedComponentManaged(formation, new PhysicsWorldIndex(0));
+            // Calculate X centering for the row
+            float totalRowWidth = (formationCount * data.formationWidth) + ((formationCount - 1) * formationGap);
+            float currentX = -totalRowWidth * 0.5f;
 
-            eManager.SetComponentData(formation, new PhysicsVelocity
+            for (int i = 0; i < formationCount; i++)
             {
-                Linear = float3.zero,
-                Angular = float3.zero
-            });
+                float3 spawnPosition = new float3(
+                    startLocation.x + currentX + (data.formationWidth * 0.5f),
+                    startLocation.y,
+                    currentZ
+                );
+                currentX += data.formationWidth + formationGap;
 
-            eManager.SetComponentData(formation, new PhysicsCollider { Value = colliderBlob });
+                Entity formation = CreateFormationEntity(ref state, isPlayer);
 
-            eManager.SetComponentData(formation, new FormationColliderData
-            {
-                lastColumns = columns,
-                lastSoldierCount = soldiersPerFormation,
-                spacing = data.spacing,
-                needsRebuilt = true,
-                filter = filter,
-                material = FormationPhysics.TriggerMaterial,
-            });
+                float3 colliderCenter = new float3(0, 0.9f, -data.formationDepth * 0.5f);
+                FixedString32Bytes cacheKey = data.soldierType;
+                if (!isPlayer) cacheKey.Append("_AI");
 
-            eManager.SetComponentData(formation, new FormationEngagementData
-            {
-                isEngaged = false,
-                needsEngagementUpdate = true,
-                lastEngagementPos = float3.zero,
-                lastEngagementRot = quaternion.identity
-            });
+                if (!colliderCache.TryGetValue(cacheKey, out var colliderBlob))
+                {
+                    colliderBlob = BoxCollider.Create(new BoxGeometry
+                    {
+                        Center = colliderCenter,
+                        Size = new float3(data.formationWidth, 2f, data.formationDepth),
+                        Orientation = quaternion.identity,
+                        BevelRadius = 0.05f
+                    },
+                    filter,
+                    FormationPhysics.TriggerMaterial);
 
-            eManager.SetComponentData(formation, new FormationPositionData
-            {
-                centerPosition = spawnPosition,
-                targetPosition = spawnPosition,
-                facing = quaternion.identity,
-                targetFacing = quaternion.identity,
-                facingTolerance = 0.1f,
-                spacing = data.spacing,
-                columns = columns,
-                soldierCount = soldiersPerFormation,
-                formationState = FormationState.rebuilding,
-                desiredAttackDepth = data.attackDepth
-            });
+                    colliderCache.Add(cacheKey, colliderBlob);
+                    _allocatedColliders.Add(colliderBlob);
+                }
 
-            eManager.SetComponentData(formation, new FormationMovementData
-            {
-                moveSpeed = data.moveSpeed,
-                rotationSpeed = math.radians(90f)
-            });
+                eManager.SetComponentData(formation, LocalTransform.FromPositionRotation(spawnPosition, armyFacing));
+                eManager.SetSharedComponentManaged(formation, new PhysicsWorldIndex(0));
 
-            eManager.SetComponentData(formation, new FormationRenderData
-            {
-                currentAnimation = 0,
-                animationFrame = 0,
-                animationTimer = 0,
-                soldierType = data.soldierType,
-                renderMaterial = materialName
-            });
+                eManager.SetComponentData(formation, new PhysicsVelocity
+                {
+                    Linear = float3.zero,
+                    Angular = float3.zero
+                });
 
-            eManager.SetComponentData(formation, new FormationCombatData
-            {
-                meleeDamage = data.damage,
-                meleeDefense = data.defense,
-                troopType = data.troopType,
-                formationHealth = data.formationHealth,
-                healthPerTroop = data.healthPerTroop,
-            });
+                eManager.SetComponentData(formation, new PhysicsCollider { Value = colliderBlob });
 
-            eManager.AddBuffer<SoldierOffset>(formation);
+                eManager.SetComponentData(formation, new FormationColliderData
+                {
+                    lastColumns = columns,
+                    lastSoldierCount = soldiersPerFormation,
+                    spacing = data.spacing,
+                    needsRebuilt = true,
+                    filter = filter,
+                    material = FormationPhysics.TriggerMaterial,
+                });
+
+                eManager.SetComponentData(formation, new FormationEngagementData
+                {
+                    isEngaged = false,
+                    needsEngagementUpdate = true,
+                    lastEngagementPos = float3.zero,
+                    lastEngagementRot = quaternion.identity
+                });
+
+                eManager.SetComponentData(formation, new FormationPositionData
+                {
+                    centerPosition = spawnPosition,
+                    targetPosition = spawnPosition,
+                    facing = armyFacing,
+                    targetFacing = armyFacing,
+                    facingTolerance = 0.1f,
+                    spacing = data.spacing,
+                    columns = columns,
+                    soldierCount = soldiersPerFormation,
+                    formationState = FormationState.rebuilding,
+                    desiredAttackDepth = data.attackDepth
+                });
+
+                eManager.SetComponentData(formation, new FormationMovementData
+                {
+                    moveSpeed = data.moveSpeed,
+                    rotationSpeed = math.radians(90f)
+                });
+
+                eManager.SetComponentData(formation, new FormationRenderData
+                {
+                    currentAnimation = 0,
+                    animationFrame = 0,
+                    animationTimer = 0,
+                    soldierType = data.soldierType,
+                    renderMaterial = materialName
+                });
+
+                eManager.SetComponentData(formation, new FormationCombatData
+                {
+                    meleeDamage = data.damage,
+                    meleeDefense = data.defense,
+                    troopType = data.troopType,
+                    formationHealth = data.formationHealth,
+                    healthPerTroop = data.healthPerTroop,
+                });
+
+                eManager.AddBuffer<SoldierOffset>(formation);
+            }
+
+            prevRowDepth = data.formationDepth;
         }
 
-        formationData.Dispose();
+        rowTypes.Dispose();
     }
 
     private Entity CreateFormationEntity(ref SystemState state, bool isPlayer)
@@ -209,17 +233,14 @@ public partial struct BattleSetupSystem : ISystem
         if (isPlayer)
             eManager.AddComponent<PlayerControlled>(formation);
         else
+        {
             eManager.AddComponent<AiControlled>(formation);
+            eManager.AddComponent<AiCommandData>(formation);
+        }
 
         return formation;
     }
 
-    private static FixedString32Bytes GetSoldierType(NativeArray<FixedString32Bytes> soldierTypes, int index)
-    {
-        if (soldierTypes.Length == 0)
-            return "Infantry";
-        return soldierTypes[index % soldierTypes.Length];
-    }
 
     private static TroopTypeData GetTroopTypeData(FixedString32Bytes soldierType, int soldierCount, int columns)
     {
