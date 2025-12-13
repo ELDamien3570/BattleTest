@@ -240,7 +240,7 @@ public partial struct BattleSetupSystem : ISystem
             data.troopType = 0;
             data.spacing = 1.5f;
             data.moveSpeed = 7f;
-            data.healthPerTroop = 200;
+            data.healthPerTroop = 400;
             data.damage = 8;
             data.defense = 5;
             data.attackDepth = 0.1f;
@@ -250,7 +250,7 @@ public partial struct BattleSetupSystem : ISystem
             data.troopType = 1;
             data.spacing = 1.25f;
             data.moveSpeed = 5f;
-            data.healthPerTroop = 175;
+            data.healthPerTroop = 350;
             data.damage = 6;
             data.defense = 10;
             data.attackDepth = 0.1f;
@@ -260,7 +260,7 @@ public partial struct BattleSetupSystem : ISystem
             data.troopType = 2;
             data.spacing = 3f;
             data.moveSpeed = 13f;
-            data.healthPerTroop = 300;
+            data.healthPerTroop = 1000;
             data.damage = 13;
             data.defense = 8;
             data.attackDepth = 0.4f;
@@ -270,7 +270,7 @@ public partial struct BattleSetupSystem : ISystem
             data.troopType = 3;
             data.spacing = 3f;
             data.moveSpeed = 15f;
-            data.healthPerTroop = 225;
+            data.healthPerTroop = 800;
             data.damage = 10;
             data.defense = 4;
             data.attackDepth = 0.4f;

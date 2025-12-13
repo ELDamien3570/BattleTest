@@ -24,9 +24,7 @@ public partial struct FormationEngagementSystem : ISystem
             PositionLookup = SystemAPI.GetComponentLookup<FormationPositionData>(true),
             EngagementDataLookup = SystemAPI.GetComponentLookup<FormationEngagementData>(false),
             OffsetLookup = SystemAPI.GetBufferLookup<SoldierOffset>(false),
-            EngagementDistance = 3f,
-            MovementThreshold = 0.1f,
-            RotationThreshold = 0.01f
+            EngagementDistance = 1.5f // Tightened range to prevent back-rank engagement
         }.Schedule(simulation, state.Dependency);
     }
 }
@@ -38,8 +36,6 @@ struct ProcessEngagementsJob : ITriggerEventsJob
     public ComponentLookup<FormationEngagementData> EngagementDataLookup;
     public BufferLookup<SoldierOffset> OffsetLookup;
     public float EngagementDistance;
-    public float MovementThreshold;
-    public float RotationThreshold;
 
     public void Execute(TriggerEvent triggerEvent)
     {
@@ -54,109 +50,95 @@ struct ProcessEngagementsJob : ITriggerEventsJob
 
         var posA = PositionLookup[entityA];
         var posB = PositionLookup[entityB];
-        var engDataA = EngagementDataLookup[entityA];
-        var engDataB = EngagementDataLookup[entityB];
-
-        bool aMoved = HasMoved(posA, engDataA);
-        bool bMoved = HasMoved(posB, engDataB);
-
-        bool aReforming = posA.formationState == FormationState.rebuilding || posA.formationState == FormationState.reshaping;
-        bool bReforming = posB.formationState == FormationState.rebuilding || posB.formationState == FormationState.reshaping;
-
-        if (!aMoved && !bMoved && !aReforming && !bReforming && !engDataA.needsEngagementUpdate && !engDataB.needsEngagementUpdate)
-        {
-
-            engDataA.targetFormation = entityB;
-            EngagementDataLookup[entityA] = engDataA;
-
-            engDataB.targetFormation = entityA;
-            EngagementDataLookup[entityB] = engDataB;
-             return;
-        }
-
+        
         var offsetsA = OffsetLookup[entityA];
         var offsetsB = OffsetLookup[entityB];
 
         float engagementDistSq = EngagementDistance * EngagementDistance;
 
-        float3 rightA = math.mul(posA.facing, new float3(1, 0, 0));
-        float halfWidthA = (posA.columns - 1) * posA.spacing * 0.5f;
+        // Calculate formation dimensions
+        float widthA = math.max(0, (posA.columns - 1) * posA.spacing);
+        float depthA = math.max(0, (posA.rows - 1) * posA.spacing);
 
-        float3 rightB = math.mul(posB.facing, new float3(1, 0, 0));
-        float halfWidthB = (posB.columns - 1) * posB.spacing * 0.5f;
+        float widthB = math.max(0, (posB.columns - 1) * posB.spacing);
+        float depthB = math.max(0, (posB.rows - 1) * posB.spacing);
 
-        bool anyEngagedA = FlagSoldiersNearEnemyFront(ref offsetsA, posA, posB.centerPosition, rightB, halfWidthB, engagementDistSq);
-        bool anyEngagedB = FlagSoldiersNearEnemyFront(ref offsetsB, posB, posA.centerPosition, rightA, halfWidthA, engagementDistSq);
+        // Check if soldiers are within engagement distance of the enemy formation's bounds
+        bool anyEngagedA = FlagSoldiersInEngagementRange(ref offsetsA, posA, posB, widthB, depthB, engagementDistSq);
+        
+        if (anyEngagedA)
+        {
+            var engDataA = EngagementDataLookup[entityA];
+            engDataA.isEngaged = true;
+            engDataA.needsEngagementUpdate = false;
+            engDataA.targetFormation = entityB;
+            engDataA.lastEngagementPos = posA.centerPosition;
+            engDataA.lastEngagementRot = posA.facing;
+            EngagementDataLookup[entityA] = engDataA;
+        }
 
-        engDataA.isEngaged = anyEngagedA;
-        engDataA.needsEngagementUpdate = false;
-        engDataA.targetFormation = entityB;
-        engDataA.lastEngagementPos = posA.centerPosition;
-        engDataA.lastEngagementRot = posA.facing;
-        EngagementDataLookup[entityA] = engDataA;
+        bool anyEngagedB = FlagSoldiersInEngagementRange(ref offsetsB, posB, posA, widthA, depthA, engagementDistSq);
 
-        engDataB.isEngaged = anyEngagedB;
-        engDataB.needsEngagementUpdate = false;
-        engDataB.targetFormation = entityA;
-        engDataB.lastEngagementPos = posB.centerPosition;
-        engDataB.lastEngagementRot = posB.facing;
-        EngagementDataLookup[entityB] = engDataB;
+        if (anyEngagedB)
+        {
+            var engDataB = EngagementDataLookup[entityB];
+            engDataB.isEngaged = true;
+            engDataB.needsEngagementUpdate = false;
+            engDataB.targetFormation = entityA;
+            engDataB.lastEngagementPos = posB.centerPosition;
+            engDataB.lastEngagementRot = posB.facing;
+            EngagementDataLookup[entityB] = engDataB;
+        }
     }
 
-    private bool HasMoved(FormationPositionData pos, FormationEngagementData engData)
-    {
-        float posDiff = math.distancesq(pos.centerPosition, engData.lastEngagementPos);
-        float rotDiff = 1f - math.abs(math.dot(pos.facing, engData.lastEngagementRot));
-
-        return posDiff > MovementThreshold * MovementThreshold || rotDiff > RotationThreshold;
-    }
-
-    private bool FlagSoldiersNearEnemyFront(
+    private bool FlagSoldiersInEngagementRange(
         ref DynamicBuffer<SoldierOffset> offsets,
-        FormationPositionData pos,
-        float3 enemyFrontCenter,
-        float3 enemyRight,
-        float enemyHalfWidth,
+        FormationPositionData myPos,
+        FormationPositionData enemyPos,
+        float enemyWidth,
+        float enemyDepth,
         float engagementDistSq)
     {
         bool anyEngaged = false;
 
-        float3 lineStartWorld = enemyFrontCenter - enemyRight * enemyHalfWidth;
-        float3 lineEndWorld = enemyFrontCenter + enemyRight * enemyHalfWidth;
-
-        quaternion inverseRot = math.inverse(pos.facing);
-        float3 localLineStart = math.rotate(inverseRot, lineStartWorld - pos.centerPosition);
-        float3 localLineEnd = math.rotate(inverseRot, lineEndWorld - pos.centerPosition);
-
-        float3 lineVec = localLineEnd - localLineStart;
-        float lineLenSq = math.lengthsq(lineVec);
-        float invLineLenSq = (lineLenSq > 0.0001f) ? 1.0f / lineLenSq : 0.0f;
-
-        float engagementDist = math.sqrt(engagementDistSq);
+        // Prepare Enemy Transformation
+        // The formation anchor (centerPosition) is at the FRONT center of the formation.
+        float3 enemyAnchor = enemyPos.centerPosition; 
+        quaternion enemyInverseRot = math.inverse(enemyPos.facing);
         
-        float minZ = math.min(localLineStart.z, localLineEnd.z) - engagementDist;
-        float maxZ = math.max(localLineStart.z, localLineEnd.z) + engagementDist;
-        float minX = math.min(localLineStart.x, localLineEnd.x) - engagementDist;
-        float maxX = math.max(localLineStart.x, localLineEnd.x) + engagementDist;
+        // Define Enemy Bounds in Local Space relative to the anchor.
+        // X is centered: [-Width/2, Width/2]
+        // Z extends backwards: [-Depth, 0]
+        float minX = -enemyWidth * 0.5f;
+        float maxX = enemyWidth * 0.5f;
+        float minZ = -enemyDepth;
+        float maxZ = 0f;
 
         for (int i = 0; i < offsets.Length; i++)
         {
             var soldier = offsets[i];
-            float3 p = soldier.currentOffset;
-
-            if (p.z < minZ || p.z > maxZ || p.x < minX || p.x > maxX)
-                continue;
-
-            float3 toPoint = p - localLineStart;
-            float t = math.dot(toPoint, lineVec) * invLineLenSq;
-            t = math.clamp(t, 0f, 1f);
             
-            float3 closestPoint = localLineStart + t * lineVec;
-            float3 diff = p - closestPoint;
-            
-            float distSq = diff.x * diff.x + diff.z * diff.z;
+            // Calculate Soldier World Position
+            float3 soldierWorldPos = myPos.centerPosition + math.rotate(myPos.facing, soldier.currentOffset);
 
-            if (distSq < engagementDistSq && !soldier.isDead && !soldier.isMoving)
+            // Transform Soldier to Enemy Local Space
+            float3 localPos = math.rotate(enemyInverseRot, soldierWorldPos - enemyAnchor);
+
+            // Calculate distance to the Enemy Rectangle in local space
+            
+            // Distance in X
+            float dx = 0f;
+            if (localPos.x < minX) dx = minX - localPos.x;
+            else if (localPos.x > maxX) dx = localPos.x - maxX;
+
+            // Distance in Z
+            float dz = 0f;
+            if (localPos.z < minZ) dz = minZ - localPos.z;
+            else if (localPos.z > maxZ) dz = localPos.z - maxZ;
+            
+            float distSq = dx * dx + dz * dz;
+
+            if (distSq < engagementDistSq && !soldier.isDead)
             {
                 soldier.isEngaged = true;
                 offsets[i] = soldier;
@@ -187,9 +169,6 @@ partial struct ClearEngagementsJob : IJobEntity
 {
     public void Execute(ref DynamicBuffer<SoldierOffset> offsets, ref FormationEngagementData engagementData)
     {
-        if (!engagementData.needsEngagementUpdate && !engagementData.isEngaged)
-            return;
-
         if (engagementData.isEngaged)
         {
             for (int i = 0; i < offsets.Length; i++)
