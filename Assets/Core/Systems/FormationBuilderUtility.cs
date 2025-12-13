@@ -37,6 +37,7 @@ public static class FormationBuilderUtility
                     targetOffset = localOffset,
                     facing = group.facing, 
                     isMoving = false,
+                    animationGroup = (byte)random.NextInt(0, 4),
                     speedModifier = random.NextFloat(0.6f, 2.15f) //randomize speed
                 });
             }

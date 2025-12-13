@@ -11,11 +11,10 @@ public partial class PlayerInputSystem : SystemBase
     private bool isRightClickDragging = false;
     private float3 dragStartPoint;
     private float3 dragCurrentPoint;
-    private int currentSoldierCount = 0;
-    private float currentSpacing = 1f; 
-    
-    private const float DragDistanceThreshold = 0.5f; 
-    private const double DragTimeThreshold = 0.20; 
+    private float currentSpacing = 1f;
+
+    private const float DragDistanceThreshold = 2f;
+    private const double DragTimeThreshold = 0.3;
     private double rightMouseDownTime;
 
     protected override void OnCreate()
@@ -33,68 +32,46 @@ public partial class PlayerInputSystem : SystemBase
 
     protected override void OnUpdate()
     {
-        currentSoldierCount = 0;
+        // Get spacing from selected formation
         foreach (var group in SystemAPI.Query<RefRO<FormationPositionData>>().WithAll<FormationSelected>())
         {
-            currentSoldierCount = group.ValueRO.soldierCount;
-            currentSpacing = group.ValueRO.spacing; 
-
-            if (previewVisualizer != null) 
-            {
-                previewVisualizer.SoldierCount = currentSoldierCount;
-                previewVisualizer.spacing = currentSpacing; 
-            }
-            break; 
+            currentSpacing = group.ValueRO.spacing;
+            break;
         }
 
         Camera cam = Camera.main;
         if (cam == null) return;
 
-        if (Input.GetMouseButtonDown(0))
+        HandleLeftClick(cam);
+        HandleRightClick(cam);
+    }
+
+    private void HandleLeftClick(Camera cam)
+    {
+        if (!Input.GetMouseButtonDown(0)) return;
+
+        Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+        if (!Physics.Raycast(ray, out RaycastHit hit)) return;
+
+        EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
+
+        foreach (var (tag, entity) in SystemAPI.Query<RefRO<FormationSelected>>().WithEntityAccess())
         {
-            Ray ray = cam.ScreenPointToRay(Input.mousePosition);
-            if (Physics.Raycast(ray, out RaycastHit hit))
-            {
-                EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
-                foreach (var (tag, entity) in SystemAPI.Query<RefRO<FormationSelected>>().WithEntityAccess())
-                {
-                    ecb.RemoveComponent<FormationSelected>(entity);
-                }
-
-                Entity closestEntity = Entity.Null;
-                float closestDist = float.MaxValue;
-
-                foreach (var (pos, playerForm, entity) in SystemAPI.Query<RefRO<FormationPositionData>, RefRO<PlayerControlled>>().WithEntityAccess())
-                {
-                    float dist = math.distance(new float2(pos.ValueRO.centerPosition.x, pos.ValueRO.centerPosition.z), new float2(hit.point.x, hit.point.z));
-                    
-                    int rows = (int)math.ceil((float)pos.ValueRO.soldierCount / pos.ValueRO.columns);
-                    float width = pos.ValueRO.columns * pos.ValueRO.spacing;
-                    float depth = rows * pos.ValueRO.spacing;
-                    float formationRadius = math.length(new float2(width, depth)) * 0.6f; 
-                    
-                    float selectionThreshold = math.max(3.0f, formationRadius);
-
-                    if (dist < selectionThreshold && dist < closestDist)
-                    {
-                        closestDist = dist;
-                        closestEntity = entity;
-                    }
-                }
-
-                if (closestEntity != Entity.Null)
-                {
-                    ecb.AddComponent<FormationSelected>(closestEntity);
-                }
-                else
-                {
-                }
-
-                ecb.Playback(EntityManager);
-                ecb.Dispose();
-            }
+            ecb.RemoveComponent<FormationSelected>(entity);
         }
 
+        Entity closest = FindClosestPlayerFormation(hit.point);
+        if (closest != Entity.Null)
+        {
+            ecb.AddComponent<FormationSelected>(closest);
+        }
+
+        ecb.Playback(EntityManager);
+        ecb.Dispose();
+    }
+
+    private void HandleRightClick(Camera cam)
+    {
         if (Input.GetMouseButtonDown(1))
         {
             Ray ray = cam.ScreenPointToRay(Input.mousePosition);
@@ -122,23 +99,14 @@ public partial class PlayerInputSystem : SystemBase
                     if (dist > DragDistanceThreshold || timeHeld > DragTimeThreshold)
                     {
                         isRightClickDragging = true;
-                        
-                        if (previewVisualizer != null && currentSoldierCount > 0)
-                        {
-                            previewVisualizer.IsDragging = true;
-                                previewVisualizer.DragStart = dragStartPoint;
-                            previewVisualizer.DragEnd = dragCurrentPoint;
-                            previewVisualizer.SoldierCount = currentSoldierCount;
-                            previewVisualizer.spacing = currentSpacing;
-                        }
                     }
                 }
-                else
+
+                if (isRightClickDragging && previewVisualizer != null)
                 {
-                    if (previewVisualizer != null)
-                    {
-                        previewVisualizer.DragEnd = dragCurrentPoint;
-                    }
+                    previewVisualizer.IsDragging = true;
+                    previewVisualizer.DragStart = dragStartPoint;
+                    previewVisualizer.DragEnd = dragCurrentPoint;
                 }
             }
         }
@@ -151,44 +119,17 @@ public partial class PlayerInputSystem : SystemBase
                 dragCurrentPoint = hit.point;
             }
 
-            bool commandExecuted = false;
-
-            if (!isRightClickDragging)
+            if (isRightClickDragging)
             {
-                // Check if we clicked on an enemy formation
-                Entity closestEnemy = Entity.Null;
-                float closestDist = float.MaxValue;
-
-                foreach (var (pos, entity) in SystemAPI.Query<RefRO<FormationPositionData>>().WithNone<PlayerControlled>().WithEntityAccess())
-                {
-                    float dist = math.distance(new float2(pos.ValueRO.centerPosition.x, pos.ValueRO.centerPosition.z), new float2(dragCurrentPoint.x, dragCurrentPoint.z));
-                    
-                    int rows = (int)math.ceil((float)pos.ValueRO.soldierCount / pos.ValueRO.columns);
-                    float width = pos.ValueRO.columns * pos.ValueRO.spacing;
-                    float depth = rows * pos.ValueRO.spacing;
-                    float formationRadius = math.length(new float2(width, depth)) * 0.6f; 
-                    
-                    float selectionThreshold = math.max(3.0f, formationRadius);
-
-                    if (dist < selectionThreshold && dist < closestDist)
-                    {
-                        closestDist = dist;
-                        closestEnemy = entity;
-                    }
-                }
-
-                if (closestEnemy != Entity.Null)
-                {
-                    ExecuteAttackCommand(closestEnemy);
-                    commandExecuted = true;
-                }
+                ExecuteReformCommand();
             }
-
-            if (!commandExecuted)
+            else
             {
-                if (isRightClickDragging)
+                // Check for attack command first
+                Entity enemy = FindClosestEnemyFormation(dragCurrentPoint);
+                if (enemy != Entity.Null)
                 {
-                    ExecuteReformCommand();
+                    ExecuteAttackCommand(enemy);
                 }
                 else
                 {
@@ -204,15 +145,28 @@ public partial class PlayerInputSystem : SystemBase
         }
     }
 
+
     private void ExecuteAttackCommand(Entity targetEnemy)
     {
         var enemyPos = SystemAPI.GetComponent<FormationPositionData>(targetEnemy);
+        var enemyCenter = (enemyPos.rows * enemyPos.spacing) / 2;
+        uint seed = 123;
+        Unity.Mathematics.Random rng = new Unity.Mathematics.Random(seed);
+        float randomDepth = rng.NextFloat(0.5f, 1.5f);
 
         foreach (var (group, colliderData) in SystemAPI.Query<RefRW<FormationPositionData>, RefRW<FormationColliderData>>().WithAll<FormationSelected>())
         {
-            group.ValueRW.targetPosition = enemyPos.centerPosition + new float3(1, 0 ,1);
-            float3 enemyForward = math.mul(enemyPos.facing, new float3(0, 0, 1));
-            group.ValueRW.targetFacing = quaternion.LookRotationSafe(-enemyForward, math.up());
+            float3 targetPos = enemyPos.centerPosition + new float3(randomDepth, 0, enemyCenter * -group.ValueRO.desiredAttackDepth + randomDepth);
+            group.ValueRW.targetPosition = targetPos;
+
+            float3 directionToEnemy = enemyPos.centerPosition - group.ValueRO.centerPosition;
+            directionToEnemy.y = 0;
+
+            if (math.lengthsq(directionToEnemy) > 0.001f)
+            {
+                group.ValueRW.targetFacing = quaternion.LookRotationSafe(math.normalize(directionToEnemy), math.up());
+            }
+
             group.ValueRW.formationState = FormationState.rotating;
             colliderData.ValueRW.needsRebuilt = true;
         }
@@ -223,60 +177,105 @@ public partial class PlayerInputSystem : SystemBase
         foreach (var (group, colliderData) in SystemAPI.Query<RefRW<FormationPositionData>, RefRW<FormationColliderData>>().WithAll<FormationSelected>())
         {
             group.ValueRW.targetPosition = targetPos;
-            
-            float3 directionToTarget = targetPos - group.ValueRO.centerPosition;
-            if (math.lengthsq(directionToTarget) > 0.001f)
+
+            float3 direction = targetPos - group.ValueRO.centerPosition;
+            if (math.lengthsq(direction) > 0.001f)
             {
-                group.ValueRW.targetFacing = quaternion.LookRotationSafe(math.normalize(directionToTarget), math.up());
+                group.ValueRW.targetFacing = quaternion.LookRotationSafe(math.normalize(direction), math.up());
             }
-            
+
             float angleDiff = QuaternionAngle(group.ValueRO.facing, group.ValueRW.targetFacing);
-            
-            if (angleDiff > group.ValueRO.facingTolerance)
-            {
-                group.ValueRW.formationState = FormationState.rotating;
-                colliderData.ValueRW.needsRebuilt = true;
-            }
-            else
-            {
-                group.ValueRW.formationState = FormationState.retargeting;
-                colliderData.ValueRW.needsRebuilt = true;
-            }
-            
+            group.ValueRW.formationState = angleDiff > group.ValueRO.facingTolerance
+                ? FormationState.rotating
+                : FormationState.retargeting;
+
+            colliderData.ValueRW.needsRebuilt = true;
         }
     }
 
     private void ExecuteReformCommand()
     {
-        float3 frontLeft = dragStartPoint;
-        float3 frontRight = dragCurrentPoint;
-        float3 center = (frontLeft + frontRight) * 0.5f;
-
-        float3 rightVec = frontRight - frontLeft;
+        float3 center = (dragStartPoint + dragCurrentPoint) * 0.5f;
+        float3 rightVec = dragCurrentPoint - dragStartPoint;
         float width = math.length(rightVec);
 
-        if (width > 0.1f)
+        if (width < 0.1f) return;
+
+        rightVec /= width;
+        float3 forwardVec = new float3(-rightVec.z, 0, rightVec.x);
+        quaternion facing = quaternion.LookRotationSafe(forwardVec, math.up());
+        int newColumns = FormationBuilderUtility.CalculateColumnsFromWidth(width, currentSpacing);
+
+        foreach (var (group, colliderData) in SystemAPI.Query<RefRW<FormationPositionData>, RefRW<FormationColliderData>>().WithAll<FormationSelected>())
         {
-            rightVec = rightVec / width;
-            float3 forwardVec = new float3(-rightVec.z, 0, rightVec.x);
-            quaternion facing = quaternion.LookRotationSafe(forwardVec, math.up());
-
-            int newColumns = FormationBuilderUtility.CalculateColumnsFromWidth(width, currentSpacing);
-
-            foreach (var (group, colliderData) in SystemAPI.Query<RefRW<FormationPositionData>, RefRW<FormationColliderData>>().WithAll<FormationSelected>())
-            {
-                group.ValueRW.columns = newColumns;
-                group.ValueRW.targetFacing = facing;
-                group.ValueRW.targetPosition = center;
-                group.ValueRW.formationState = FormationState.rebuilding;
-                colliderData.ValueRW.needsRebuilt = true;
-            }
+            group.ValueRW.columns = newColumns;
+            group.ValueRW.targetFacing = facing;
+            group.ValueRW.targetPosition = center;
+            group.ValueRW.formationState = FormationState.rebuilding;
+            colliderData.ValueRW.needsRebuilt = true;
         }
     }
-    
+
+
+    #region Helpers
+    private Entity FindClosestPlayerFormation(float3 point)
+    {
+        Entity closest = Entity.Null;
+        float closestDist = float.MaxValue;
+
+        foreach (var (pos, entity) in SystemAPI.Query<RefRO<FormationPositionData>>().WithAll<PlayerControlled>().WithEntityAccess())
+        {
+            float dist = GetFormationDistance(pos.ValueRO, point);
+            float threshold = GetFormationThreshold(pos.ValueRO);
+
+            if (dist < threshold && dist < closestDist)
+            {
+                closestDist = dist;
+                closest = entity;
+            }
+        }
+        return closest;
+    }
+
+    private Entity FindClosestEnemyFormation(float3 point)
+    {
+        Entity closest = Entity.Null;
+        float closestDist = float.MaxValue;
+
+        foreach (var (pos, entity) in SystemAPI.Query<RefRO<FormationPositionData>>().WithAll<AiControlled>().WithEntityAccess())
+        {
+            float dist = GetFormationDistance(pos.ValueRO, point);
+            float threshold = GetFormationThreshold(pos.ValueRO);
+
+            if (dist < threshold && dist < closestDist)
+            {
+                closestDist = dist;
+                closest = entity;
+            }
+        }
+        return closest;
+    }
+
+    private float GetFormationDistance(FormationPositionData pos, float3 point)
+    {
+        return math.distance(
+            new float2(pos.centerPosition.x, pos.centerPosition.z),
+            new float2(point.x, point.z));
+    }
+
+    private float GetFormationThreshold(FormationPositionData pos)
+    {
+        int rows = (int)math.ceil((float)pos.soldierCount / pos.columns);
+        float width = pos.columns * pos.spacing;
+        float depth = rows * pos.spacing;
+        float radius = math.length(new float2(width, depth)) * 0.6f;
+        return math.max(3.0f, radius);
+    }
     private static float QuaternionAngle(quaternion a, quaternion b)
     {
         float dot = math.abs(math.dot(a, b));
         return math.acos(math.min(dot, 1.0f)) * 2.0f;
     }
+    #endregion
+
 }

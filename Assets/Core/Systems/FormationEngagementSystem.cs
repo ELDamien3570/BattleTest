@@ -57,19 +57,15 @@ struct ProcessEngagementsJob : ITriggerEventsJob
         var engDataA = EngagementDataLookup[entityA];
         var engDataB = EngagementDataLookup[entityB];
 
-        // Check if either formation has moved significantly
         bool aMoved = HasMoved(posA, engDataA);
         bool bMoved = HasMoved(posB, engDataB);
 
-        // Check if formations are rebuilding or reshaping (internal movement)
         bool aReforming = posA.formationState == FormationState.rebuilding || posA.formationState == FormationState.reshaping;
         bool bReforming = posB.formationState == FormationState.rebuilding || posB.formationState == FormationState.reshaping;
 
-        // Skip if neither formation moved, neither is reforming, and both were already processed
         if (!aMoved && !bMoved && !aReforming && !bReforming && !engDataA.needsEngagementUpdate && !engDataB.needsEngagementUpdate)
         {
-            // FIX: Restore targetFormation because ClearEngagementSystem wipes it every frame.
-            // Without this, stationary formations lose their target and stop dealing damage.
+
             engDataA.targetFormation = entityB;
             EngagementDataLookup[entityA] = engDataA;
 
@@ -83,18 +79,15 @@ struct ProcessEngagementsJob : ITriggerEventsJob
 
         float engagementDistSq = EngagementDistance * EngagementDistance;
 
-        // Get front line info
         float3 rightA = math.mul(posA.facing, new float3(1, 0, 0));
         float halfWidthA = (posA.columns - 1) * posA.spacing * 0.5f;
 
         float3 rightB = math.mul(posB.facing, new float3(1, 0, 0));
         float halfWidthB = (posB.columns - 1) * posB.spacing * 0.5f;
 
-        // Process engagements
         bool anyEngagedA = FlagSoldiersNearEnemyFront(ref offsetsA, posA, posB.centerPosition, rightB, halfWidthB, engagementDistSq);
         bool anyEngagedB = FlagSoldiersNearEnemyFront(ref offsetsB, posB, posA.centerPosition, rightA, halfWidthA, engagementDistSq);
 
-        // Update engagement data
         engDataA.isEngaged = anyEngagedA;
         engDataA.needsEngagementUpdate = false;
         engDataA.targetFormation = entityB;
@@ -128,23 +121,17 @@ struct ProcessEngagementsJob : ITriggerEventsJob
     {
         bool anyEngaged = false;
 
-        // --- OPTIMIZATION START ---
-        
-        // 1. Calculate World Space Line
         float3 lineStartWorld = enemyFrontCenter - enemyRight * enemyHalfWidth;
         float3 lineEndWorld = enemyFrontCenter + enemyRight * enemyHalfWidth;
 
-        // 2. Transform Enemy Line into THIS Formation's Local Space
         quaternion inverseRot = math.inverse(pos.facing);
         float3 localLineStart = math.rotate(inverseRot, lineStartWorld - pos.centerPosition);
         float3 localLineEnd = math.rotate(inverseRot, lineEndWorld - pos.centerPosition);
 
-        // 3. Pre-calculate Line Segment Math
         float3 lineVec = localLineEnd - localLineStart;
         float lineLenSq = math.lengthsq(lineVec);
         float invLineLenSq = (lineLenSq > 0.0001f) ? 1.0f / lineLenSq : 0.0f;
 
-        // 4. Calculate AABB Bounds for fast culling
         float engagementDist = math.sqrt(engagementDistSq);
         
         float minZ = math.min(localLineStart.z, localLineEnd.z) - engagementDist;
@@ -157,11 +144,9 @@ struct ProcessEngagementsJob : ITriggerEventsJob
             var soldier = offsets[i];
             float3 p = soldier.currentOffset;
 
-            // Fast AABB Cull
             if (p.z < minZ || p.z > maxZ || p.x < minX || p.x > maxX)
                 continue;
 
-            // Inlined DistanceToLineSegmentSq (Local Space)
             float3 toPoint = p - localLineStart;
             float t = math.dot(toPoint, lineVec) * invLineLenSq;
             t = math.clamp(t, 0f, 1f);
@@ -169,7 +154,6 @@ struct ProcessEngagementsJob : ITriggerEventsJob
             float3 closestPoint = localLineStart + t * lineVec;
             float3 diff = p - closestPoint;
             
-            // Only considering X and Z distance as per original logic
             float distSq = diff.x * diff.x + diff.z * diff.z;
 
             if (distSq < engagementDistSq && !soldier.isDead && !soldier.isMoving)
@@ -179,7 +163,6 @@ struct ProcessEngagementsJob : ITriggerEventsJob
                 anyEngaged = true;
             }
         }
-        // --- OPTIMIZATION END ---
 
         return anyEngaged;
     }
@@ -195,8 +178,6 @@ public partial struct ClearEngagementSystem : ISystem
     public void OnUpdate(ref SystemState state)
     {
         foreach (var groups in SystemAPI.Query<RefRW<FormationEngagementData>>()) groups.ValueRW.targetFormation = default;
-
-        // Only clear formations that are flagged as engaged AND need update
         new ClearEngagementsJob().ScheduleParallel();
     }
 }
@@ -206,11 +187,9 @@ partial struct ClearEngagementsJob : IJobEntity
 {
     public void Execute(ref DynamicBuffer<SoldierOffset> offsets, ref FormationEngagementData engagementData)
     {
-        // Skip if formation hasn't moved and doesn't need update
         if (!engagementData.needsEngagementUpdate && !engagementData.isEngaged)
             return;
 
-        // Only clear if we were engaged (avoid unnecessary writes)
         if (engagementData.isEngaged)
         {
             for (int i = 0; i < offsets.Length; i++)

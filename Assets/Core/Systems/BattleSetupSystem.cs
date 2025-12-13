@@ -2,14 +2,11 @@ using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Collections;
 using Unity.Physics;
-
 using Unity.Transforms;
-using Unity.Rendering;
 
 [UpdateInGroup(typeof(InitializationSystemGroup))]
 public partial struct BattleSetupSystem : ISystem
 {
-    // Track allocated blobs to dispose of them when the system is destroyed
     private NativeList<BlobAssetReference<Collider>> _allocatedColliders;
 
     public void OnCreate(ref SystemState state)
@@ -20,7 +17,6 @@ public partial struct BattleSetupSystem : ISystem
 
     public void OnDestroy(ref SystemState state)
     {
-        // Dispose of all physics colliders created by this system
         if (_allocatedColliders.IsCreated)
         {
             foreach (var collider in _allocatedColliders)
@@ -34,361 +30,111 @@ public partial struct BattleSetupSystem : ISystem
 
     public void OnUpdate(ref SystemState state)
     {
-        var battleSetupData = SystemAPI.GetSingleton<BattleSetupData>();
-        var battleSetupEntity = SystemAPI.GetSingletonEntity<BattleSetupData>();
+        var setupData = SystemAPI.GetSingleton<BattleSetupData>();
+        var setupEntity = SystemAPI.GetSingletonEntity<BattleSetupData>();
 
-        // Initialize with length 0 to avoid "default" uninitialized struct issues
-        NativeArray<FixedString32Bytes> soldierTypesCopy = new NativeArray<FixedString32Bytes>(0, Allocator.Temp);
+        var soldierTypes = new NativeArray<FixedString32Bytes>(0, Allocator.Temp);
 
-        if (state.EntityManager.HasBuffer<SoldierTypeBuffer>(battleSetupEntity))
+        if (state.EntityManager.HasBuffer<SoldierTypeBuffer>(setupEntity))
         {
-            var buffer = state.EntityManager.GetBuffer<SoldierTypeBuffer>(battleSetupEntity);
-            // Resize and copy
-            soldierTypesCopy = new NativeArray<FixedString32Bytes>(buffer.Length, Allocator.Temp);
+            var buffer = state.EntityManager.GetBuffer<SoldierTypeBuffer>(setupEntity);
+            soldierTypes = new NativeArray<FixedString32Bytes>(buffer.Length, Allocator.Temp);
             for (int i = 0; i < buffer.Length; i++)
             {
-                soldierTypesCopy[i] = buffer[i].soldierType;
+                soldierTypes[i] = buffer[i].soldierType;
             }
         }
 
-        // Use a cache to avoid creating duplicate colliders for the same unit type
-        // Key: Soldier Type Name, Value: Collider Blob
-        var colliderCache = new NativeHashMap<FixedString32Bytes, BlobAssetReference<Collider>>(4, Allocator.Temp);
+        var colliderCache = new NativeHashMap<FixedString32Bytes, BlobAssetReference<Collider>>(8, Allocator.Temp);
 
-        SpawnPlayerArmy(ref state, battleSetupData, battleSetupEntity, soldierTypesCopy, ref colliderCache);
-        SpawnAIArmy(ref state, battleSetupData, battleSetupEntity, soldierTypesCopy, ref colliderCache);
-        
+        SpawnArmy(ref state, setupData, soldierTypes, ref colliderCache, isPlayer: true);
+        SpawnArmy(ref state, setupData, soldierTypes, ref colliderCache, isPlayer: false);
+
         colliderCache.Dispose();
+        soldierTypes.Dispose();
         state.Enabled = false;
     }
 
-    public void SpawnPlayerArmy(ref SystemState state, BattleSetupData setupData, Entity setupEntity, NativeArray<FixedString32Bytes> soldierType, ref NativeHashMap<FixedString32Bytes, BlobAssetReference<Collider>> colliderCache)
+    private void SpawnArmy(
+        ref SystemState state,
+        BattleSetupData setupData,
+        NativeArray<FixedString32Bytes> soldierTypes,
+        ref NativeHashMap<FixedString32Bytes, BlobAssetReference<Collider>> colliderCache,
+        bool isPlayer)
     {
         var eManager = state.EntityManager;
 
         int formationCount = setupData.formationPreSide;
-        float formationGap = 2f;
-        float soldierSpacing = 2f;
-
         int soldiersPerFormation = setupData.soldiersPerSide;
         int columns = FormationBuilderUtility.CalculateSquareGridColumns(soldiersPerFormation) + 10;
 
-        float singleFormationWidth = (columns - 1) * soldierSpacing + 1f;
-        float totalArmyWidth = (singleFormationWidth * formationCount) + (formationGap * (formationCount - 1));
-        float startXOffset = -totalArmyWidth * 0.5f;
-        float currentXOffset = startXOffset + (singleFormationWidth * 0.5f);
+        float formationGap = 4f;
+        float3 startLocation = isPlayer ? setupData.playerStartLocation : setupData.aiStartLocation;
+        FixedString32Bytes materialName = isPlayer ? setupData.playerMaterial : setupData.aiMaterial;
+        CollisionFilter filter = isPlayer ? FormationPhysics.PlayerFilter : FormationPhysics.AIFilter;
+
+        var formationData = new NativeArray<TroopTypeData>(formationCount, Allocator.Temp);
+        float totalArmyWidth = 0f;
 
         for (int i = 0; i < formationCount; i++)
         {
-            Entity formation = eManager.CreateEntity(
-                typeof(FormationPositionData),
-                typeof(FormationMovementData),
-                typeof(FormationRenderData),
-                typeof(FormationCombatData),
-                typeof(PlayerControlled),
-                typeof(LocalTransform),
-                typeof(PhysicsCollider),
-                typeof(PhysicsVelocity),
-                typeof(PhysicsWorldIndex),
-                typeof(FormationColliderData),
-                typeof(FormationEngagementData)
-            );
-
-            float3 spawnPosition = setupData.playerStartLocation;
-            spawnPosition.x += currentXOffset;
-
-            FixedString32Bytes currentSoldierType = "player";
-            if (soldierType.Length > 0)
-            {
-                int typeIndex = i % soldierType.Length;
-                currentSoldierType = soldierType[typeIndex];
-            }
-
-            #region Determine troop type info from formation troop type
-
-
-            int detTroopType = 0;
-            float detSpacing = 1;
-            float detMoveSpeed = 5;
-            int detHealthPerTroop = 100;
-
-            if (currentSoldierType.Contains(new FixedString32Bytes("Infantry")))
-            {
-                detTroopType = 0;
-                detSpacing = 2f;
-                detMoveSpeed = 7;
-                detHealthPerTroop = 150;
-            }
-            else if (currentSoldierType.Contains(new FixedString32Bytes("Archer")))
-            {
-                detTroopType = 1;
-                detSpacing = 1.5f;
-                detMoveSpeed = 6;
-                detHealthPerTroop = 100;
-            }
-            else if (currentSoldierType.Contains(new FixedString32Bytes("Cavalry")))
-            {
-                detTroopType = 2;
-                detSpacing = 3.5f;
-                detMoveSpeed = 13;
-                detHealthPerTroop = 300;
-            }
-            else if (currentSoldierType.Contains(new FixedString32Bytes("CavArcher")))
-            {
-                detTroopType = 3;
-                detSpacing = 3f;
-                detMoveSpeed = 15;
-                detHealthPerTroop = 225;
-            }
-
-            float estRows = (setupData.soldiersPerSide / columns) + 1;
-            float singleFormationDepth = estRows * detSpacing - detSpacing;
-            float exactSingleFormWidth = (columns - 1) * detSpacing;
-
-            float3 colliderCenter = new float3(0, .9f, -singleFormationDepth / 2);
-
-            int detFormationHealth = detHealthPerTroop * soldiersPerFormation;
-
-            #endregion
-
-            eManager.SetComponentData(formation, new PhysicsVelocity
-            {
-                Linear = float3.zero,
-                Angular = float3.zero
-            });
-
-            var filter = FormationPhysics.PlayerFilter;
-            var material = FormationPhysics.TriggerMaterial;
-            uint newWorldIndex = 0;
-
-            eManager.SetComponentData(formation, LocalTransform.FromPositionRotation(spawnPosition, quaternion.identity));
-            eManager.SetSharedComponentManaged(formation, new PhysicsWorldIndex(newWorldIndex));
-
-            eManager.SetComponentData(formation, new FormationColliderData
-            {
-                lastColumns = columns,
-                lastSoldierCount = soldiersPerFormation,
-                spacing = detSpacing,
-                needsRebuilt = true,
-                filter = filter,
-                material = material,
-            });
-
-            // Check cache for existing collider blob
-            if (!colliderCache.TryGetValue(currentSoldierType, out BlobAssetReference<Collider> colliderBlob))
-            {
-                // Create new blob if not found
-                colliderBlob = Unity.Physics.BoxCollider.Create(new BoxGeometry
-                {
-                    Center = colliderCenter,
-                    Size = new float3(exactSingleFormWidth, 2f, singleFormationDepth),
-                    Orientation = (quaternion.identity),
-                    BevelRadius = 0.05f
-                },
-                filter,
-                material
-                );
-
-                // Cache it and track for disposal
-                colliderCache.Add(currentSoldierType, colliderBlob);
-                _allocatedColliders.Add(colliderBlob);
-            }
-
-            eManager.SetComponentData(formation, new PhysicsCollider
-            {
-                Value = colliderBlob
-            });
-
-            eManager.SetComponentData(formation, new FormationEngagementData
-            {
-                isEngaged = false,
-                needsEngagementUpdate = true,
-                lastEngagementPos = float3.zero,
-                lastEngagementRot = quaternion.identity
-            });
-
-
-            eManager.SetComponentData(formation, new FormationPositionData
-            {
-                centerPosition = spawnPosition,
-                targetPosition = spawnPosition,
-                facing = (quaternion.identity),
-                targetFacing = (quaternion.identity),
-                facingTolerance = .1f,
-                spacing = detSpacing,
-                columns = columns,
-                soldierCount = soldiersPerFormation,
-                formationState = FormationState.rebuilding
-            });
-
-            eManager.SetComponentData(formation, new FormationMovementData
-            {
-                moveSpeed = detMoveSpeed,
-                rotationSpeed = math.radians(180f) / 2f
-            });
-
-            eManager.SetComponentData(formation, new FormationRenderData
-            {
-                currentAnimation = 0,
-                animationFrame = 0,
-                animationTimer = 0,
-                soldierType = currentSoldierType,
-                renderMaterial = setupData.playerMaterial
-            });
-
-            eManager.SetComponentData(formation, new FormationCombatData
-            {
-                meleeDamage = 5,
-                meleeDefense = 5,
-                troopType = detTroopType,
-                formationHealth= detFormationHealth,
-                lastDeathHealth = detFormationHealth,
-                healthPerTroop = detHealthPerTroop,
-            });
-
-            eManager.AddBuffer<SoldierOffset>(formation);
-
-            currentXOffset += singleFormationWidth + formationGap;
+            FixedString32Bytes soldierType = GetSoldierType(soldierTypes, i);
+            formationData[i] = GetTroopTypeData(soldierType, soldiersPerFormation, columns);
+            totalArmyWidth += formationData[i].formationWidth;
         }
-    }
+        totalArmyWidth += formationGap * (formationCount - 1);
 
-
-    public void SpawnAIArmy(ref SystemState state, BattleSetupData setupData, Entity setupEntity, NativeArray<FixedString32Bytes> soldierType, ref NativeHashMap<FixedString32Bytes, BlobAssetReference<Collider>> colliderCache)
-    {
-        var eManager = state.EntityManager;
-
-        int formationCount = setupData.formationPreSide;
-        float formationGap = 2f;
-        float soldierSpacing = 2f;
-
-        int soldiersPerFormation = setupData.soldiersPerSide;
-        int columns = FormationBuilderUtility.CalculateSquareGridColumns(soldiersPerFormation) + 10;
-
-        float singleFormationWidth = (columns - 1) * soldierSpacing + 1f;
-        float totalArmyWidth = (singleFormationWidth * formationCount) + (formationGap * (formationCount - 1));
-        float startXOffset = -totalArmyWidth * 0.5f;
-        float currentXOffset = startXOffset + (singleFormationWidth * 0.5f);
+        float currentX = -totalArmyWidth * 0.5f;
 
         for (int i = 0; i < formationCount; i++)
         {
-            Entity formation = eManager.CreateEntity(
-                typeof(FormationPositionData),
-                typeof(FormationMovementData),
-                typeof(FormationRenderData),
-                typeof(FormationCombatData),
-                typeof(AiControlled),
-                typeof(LocalTransform),
-                typeof(PhysicsCollider),
-                typeof(PhysicsVelocity),
-                typeof(PhysicsWorldIndex),
-                typeof(FormationColliderData),
-                typeof(FormationEngagementData)
-            );
+            var data = formationData[i];
 
-            float3 spawnPosition = setupData.aiStartLocation;
-            spawnPosition.x += currentXOffset;
+            float3 spawnPosition = startLocation;
+            spawnPosition.x += currentX + (data.formationWidth * 0.5f);
+            currentX += data.formationWidth + formationGap;
 
-            FixedString32Bytes currentSoldierType = "player";
-            if (soldierType.Length > 0)
+            Entity formation = CreateFormationEntity(ref state, isPlayer);
+
+            float3 colliderCenter = new float3(0, 0.9f, -data.formationDepth * 0.5f);
+            FixedString32Bytes cacheKey = data.soldierType;
+            if (!isPlayer) cacheKey.Append("_AI");
+
+            if (!colliderCache.TryGetValue(cacheKey, out var colliderBlob))
             {
-                int typeIndex = i % soldierType.Length;
-                currentSoldierType = soldierType[typeIndex];
-            }
-
-            #region Determine troop type info from formation troop type
-
-            int detTroopType = 0;
-            float detSpacing = 1;
-            float detMoveSpeed = 5;
-            int detHealthPerTroop = 100;
-
-            if (currentSoldierType.Contains(new FixedString32Bytes("Infantry")))
-            {
-                detTroopType = 0;
-                detSpacing = 2f;
-                detMoveSpeed = 7;
-                detHealthPerTroop = 150;
-            }
-            else if (currentSoldierType.Contains(new FixedString32Bytes("Archer")))
-            {
-                detTroopType = 1;
-                detSpacing = 1.5f;
-                detMoveSpeed = 6;
-                detHealthPerTroop = 100;
-            }
-            else if (currentSoldierType.Contains(new FixedString32Bytes("Cavalry")))
-            {
-                detTroopType = 2;
-                detSpacing = 3.5f;
-                detMoveSpeed = 13;
-                detHealthPerTroop = 300;
-            }
-            else if (currentSoldierType.Contains(new FixedString32Bytes("CavArcher")))
-            {
-                detTroopType = 3;
-                detSpacing = 3f;
-                detMoveSpeed = 15;
-                detHealthPerTroop = 225;
-            }
-
-            float estRows = (setupData.soldiersPerSide / columns) + 1;
-            float singleFormationDepth = estRows * detSpacing - detSpacing;     
-            float exactSingleFormWidth = (columns - 1) * detSpacing;
-
-            float3 colliderCenter = new float3(0, .9f, -singleFormationDepth / 2);
-
-            int detFormationHealth = detHealthPerTroop * soldiersPerFormation;
-
-            #endregion
-
-            var filter = FormationPhysics.AIFilter;
-            var material = FormationPhysics.TriggerMaterial;
-            uint newWorldIndex = 0;
-
-            eManager.SetComponentData(formation, LocalTransform.FromPositionRotation(spawnPosition, quaternion.identity));
-            eManager.SetSharedComponentManaged(formation, new PhysicsWorldIndex(newWorldIndex));
-
-
-            eManager.SetComponentData(formation, new PhysicsVelocity
-            {
-                Linear = float3.zero,
-                Angular = float3.zero
-            });
-
-            eManager.SetComponentData(formation, new FormationColliderData
-            {
-                lastColumns = columns,
-                lastSoldierCount = soldiersPerFormation,
-                spacing = detSpacing,
-                needsRebuilt = true,
-                filter = filter,
-                material = material
-            });
-
-            
-            FixedString32Bytes cacheKey = currentSoldierType;
-            cacheKey.Append(new FixedString32Bytes("_AI")); 
-
-            if (!colliderCache.TryGetValue(cacheKey, out BlobAssetReference<Unity.Physics.Collider> colliderBlob))
-            {
-                colliderBlob = Unity.Physics.BoxCollider.Create(new BoxGeometry
+                colliderBlob = BoxCollider.Create(new BoxGeometry
                 {
                     Center = colliderCenter,
-                    Size = new float3(exactSingleFormWidth, 2f, singleFormationDepth),
+                    Size = new float3(data.formationWidth, 2f, data.formationDepth),
                     Orientation = quaternion.identity,
                     BevelRadius = 0.05f
                 },
-                filter, // AI Filter
-                material
-                );
+                filter,
+                FormationPhysics.TriggerMaterial);
 
                 colliderCache.Add(cacheKey, colliderBlob);
                 _allocatedColliders.Add(colliderBlob);
             }
 
-            eManager.SetComponentData(formation, new PhysicsCollider
+            eManager.SetComponentData(formation, LocalTransform.FromPositionRotation(spawnPosition, quaternion.identity));
+            eManager.SetSharedComponentManaged(formation, new PhysicsWorldIndex(0));
+
+            eManager.SetComponentData(formation, new PhysicsVelocity
             {
-                Value = colliderBlob,
+                Linear = float3.zero,
+                Angular = float3.zero
+            });
+
+            eManager.SetComponentData(formation, new PhysicsCollider { Value = colliderBlob });
+
+            eManager.SetComponentData(formation, new FormationColliderData
+            {
+                lastColumns = columns,
+                lastSoldierCount = soldiersPerFormation,
+                spacing = data.spacing,
+                needsRebuilt = true,
+                filter = filter,
+                material = FormationPhysics.TriggerMaterial,
             });
 
             eManager.SetComponentData(formation, new FormationEngagementData
@@ -405,17 +151,18 @@ public partial struct BattleSetupSystem : ISystem
                 targetPosition = spawnPosition,
                 facing = quaternion.identity,
                 targetFacing = quaternion.identity,
-                facingTolerance = .1f,
-                spacing = detSpacing,
+                facingTolerance = 0.1f,
+                spacing = data.spacing,
                 columns = columns,
                 soldierCount = soldiersPerFormation,
-                formationState = FormationState.rebuilding
+                formationState = FormationState.rebuilding,
+                desiredAttackDepth = data.attackDepth
             });
 
             eManager.SetComponentData(formation, new FormationMovementData
             {
-                moveSpeed = detMoveSpeed,
-                rotationSpeed = math.radians(180f) / 2f
+                moveSpeed = data.moveSpeed,
+                rotationSpeed = math.radians(90f)
             });
 
             eManager.SetComponentData(formation, new FormationRenderData
@@ -423,48 +170,158 @@ public partial struct BattleSetupSystem : ISystem
                 currentAnimation = 0,
                 animationFrame = 0,
                 animationTimer = 0,
-                soldierType = currentSoldierType,
-                renderMaterial = setupData.aiMaterial
+                soldierType = data.soldierType,
+                renderMaterial = materialName
             });
 
             eManager.SetComponentData(formation, new FormationCombatData
             {
-                meleeDamage = 5,
-                meleeDefense = 5,
-                healthPerTroop = detHealthPerTroop,
-                formationHealth = detFormationHealth,
-                lastDeathHealth = detFormationHealth,
-                troopType = detTroopType
+                meleeDamage = data.damage,
+                meleeDefense = data.defense,
+                troopType = data.troopType,
+                formationHealth = data.formationHealth,
+                lastDeathHealth = data.formationHealth,
+                healthPerTroop = data.healthPerTroop,
             });
 
             eManager.AddBuffer<SoldierOffset>(formation);
-
-            currentXOffset += singleFormationWidth + formationGap;
         }
+
+        formationData.Dispose();
+    }
+
+    private Entity CreateFormationEntity(ref SystemState state, bool isPlayer)
+    {
+        var eManager = state.EntityManager;
+
+        Entity formation = eManager.CreateEntity(
+            typeof(FormationPositionData),
+            typeof(FormationMovementData),
+            typeof(FormationRenderData),
+            typeof(FormationCombatData),
+            typeof(LocalTransform),
+            typeof(PhysicsCollider),
+            typeof(PhysicsVelocity),
+            typeof(PhysicsWorldIndex),
+            typeof(FormationColliderData),
+            typeof(FormationEngagementData)
+        );
+
+        if (isPlayer)
+            eManager.AddComponent<PlayerControlled>(formation);
+        else
+            eManager.AddComponent<AiControlled>(formation);
+
+        return formation;
+    }
+
+    private static FixedString32Bytes GetSoldierType(NativeArray<FixedString32Bytes> soldierTypes, int index)
+    {
+        if (soldierTypes.Length == 0)
+            return "Infantry";
+        return soldierTypes[index % soldierTypes.Length];
+    }
+
+    private static TroopTypeData GetTroopTypeData(FixedString32Bytes soldierType, int soldierCount, int columns)
+    {
+        var data = new TroopTypeData
+        {
+            soldierType = soldierType,
+            troopType = 0,
+            spacing = 1f,
+            moveSpeed = 5f,
+            healthPerTroop = 100,
+            damage = 5,
+            defense = 5,
+            attackDepth = 0f
+        };
+
+        if (soldierType.Contains(new FixedString32Bytes("Infantry")))
+        {
+            data.troopType = 0;
+            data.spacing = 1.5f;
+            data.moveSpeed = 7f;
+            data.healthPerTroop = 200;
+            data.damage = 8;
+            data.defense = 5;
+            data.attackDepth = 0.1f;
+        }
+        else if (soldierType.Contains(new FixedString32Bytes("Spearmen")))
+        {
+            data.troopType = 1;
+            data.spacing = 1.25f;
+            data.moveSpeed = 5f;
+            data.healthPerTroop = 175;
+            data.damage = 6;
+            data.defense = 10;
+            data.attackDepth = 0.1f;
+        }
+        else if (soldierType.Contains(new FixedString32Bytes("HeavyCavalry")))
+        {
+            data.troopType = 2;
+            data.spacing = 3f;
+            data.moveSpeed = 13f;
+            data.healthPerTroop = 300;
+            data.damage = 13;
+            data.defense = 8;
+            data.attackDepth = 0.4f;
+        }
+        else if (soldierType.Contains(new FixedString32Bytes("LightCavalry")))
+        {
+            data.troopType = 3;
+            data.spacing = 3f;
+            data.moveSpeed = 15f;
+            data.healthPerTroop = 225;
+            data.damage = 10;
+            data.defense = 4;
+            data.attackDepth = 0.4f;
+        }
+
+        int rows = (int)math.ceil((float)soldierCount / columns);
+        data.formationWidth = (columns - 1) * data.spacing;
+        data.formationDepth = (rows - 1) * data.spacing;
+        data.formationHealth = data.healthPerTroop * soldierCount;
+
+        return data;
+    }
+
+    private struct TroopTypeData
+    {
+        public FixedString32Bytes soldierType;
+        public int troopType;
+        public float spacing;
+        public float moveSpeed;
+        public int healthPerTroop;
+        public int damage;
+        public int defense;
+        public float attackDepth;
+
+        // Derived
+        public float formationWidth;
+        public float formationDepth;
+        public int formationHealth;
     }
 }
 
 public static class FormationPhysics
 {
-    // Collision categories
     public const uint PlayerFormation = 1u << 8;
     public const uint AIFormation = 1u << 9;
 
     public static CollisionFilter PlayerFilter => new CollisionFilter
     {
         BelongsTo = PlayerFormation,
-        CollidesWith = AIFormation,  // Only collide with enemy
+        CollidesWith = AIFormation,
         GroupIndex = 0
     };
 
     public static CollisionFilter AIFilter => new CollisionFilter
     {
         BelongsTo = AIFormation,
-        CollidesWith = PlayerFormation,  // Only collide with enemy
+        CollidesWith = PlayerFormation,
         GroupIndex = 0
     };
 
-    // Material that raises trigger events (no physical collision response)
     public static Unity.Physics.Material TriggerMaterial => new Unity.Physics.Material
     {
         CollisionResponse = CollisionResponsePolicy.RaiseTriggerEvents

@@ -22,21 +22,36 @@ public partial struct FormationCombatSystem : ISystem
                 {
                     var enemyGroup = engagementData.ValueRO.targetFormation;
 
-                    // Check if the entity is valid and exists before accessing it
                     if (enemyGroup != Entity.Null && state.EntityManager.Exists(enemyGroup))
                     {
                         var enemyCombatData = SystemAPI.GetComponent<FormationCombatData>(enemyGroup);
-                        enemyCombatData.formationHealth -= damageThisFrame;
+                        float defenseThisFrame = enemyCombatData.meleeDefense * deltaTime;
+                        float totalDamageThisFrame = damageThisFrame - defenseThisFrame;
+                        if (totalDamageThisFrame <= 0)
+                        {
+                            totalDamageThisFrame = 0.1f;
+                        }
+                        enemyCombatData.formationHealth -= totalDamageThisFrame;
+
+                        if (enemyCombatData.formationHealth < 0) enemyCombatData.formationHealth = 0;
+
                         SystemAPI.SetComponent(enemyGroup, enemyCombatData);
                     }
                 }
-                  
             }
 
+            // Check for individual death
             float healthDif = combatdata.ValueRO.lastDeathHealth - combatdata.ValueRO.formationHealth;
             if (healthDif > combatdata.ValueRO.healthPerTroop)
             {
                 combatdata.ValueRW.markedForDeath = true;
+            }
+
+            // Check for full formation wipe
+            if (combatdata.ValueRO.formationHealth <= 0)
+            {
+                combatdata.ValueRW.formationWiped = true;
+                combatdata.ValueRW.formationHealth = 0;
             }
         }
 
@@ -50,6 +65,30 @@ partial struct KillSoldiersJob : IJobEntity
 {
     public void Execute(ref DynamicBuffer<SoldierOffset> offsets, ref FormationCombatData combatData)
     {
+        uint seed = 35 * 70;
+        var rng = new Unity.Mathematics.Random(seed);
+
+        //formation wipe
+        if (combatData.formationWiped)
+        {
+            for (int i = 0; i < offsets.Length; i++)
+            {
+                var soldier = offsets[i];
+                if (!soldier.isDead)
+                {
+                    soldier.isDead = true;
+                    soldier.isEngaged = false;
+                    soldier.isMoving = false;
+                    soldier.deathTimer = rng.NextFloat(0f, 0.3f); 
+                    offsets[i] = soldier;
+                }
+            }
+            combatData.formationWiped = false;
+            combatData.markedForDeath = false;
+            return;
+        }
+
+        //single death
         if (!combatData.markedForDeath) return;
 
         for (int i = 0; i < offsets.Length; i++)
@@ -60,6 +99,7 @@ partial struct KillSoldiersJob : IJobEntity
                 soldier.isDead = true;
                 soldier.isEngaged = false;
                 soldier.isMoving = false;
+                soldier.deathTimer = rng.NextFloat(0f, 0.3f);
                 offsets[i] = soldier;
 
                 combatData.markedForDeath = false;
@@ -77,7 +117,7 @@ public partial struct DeadSoldierRemovalSystem : ISystem
     public void OnUpdate(ref SystemState state)
     {
         float deltaTime = SystemAPI.Time.DeltaTime;
-        float deathAnimationDuration = 1f;
+        float deathAnimationDuration = 2;
 
 
         var bufferLookup = SystemAPI.GetBufferLookup<SoldierOffset>(false);
@@ -117,7 +157,7 @@ public partial struct DeadSoldierRemovalSystem : ISystem
 
                 colliderData.ValueRW.needsRebuilt = true;
             }
-        }   
+        }
     }
 
 }

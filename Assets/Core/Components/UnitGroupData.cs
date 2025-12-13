@@ -25,7 +25,9 @@ public struct FormationPositionData : IComponentData
     
     //blend progress
     public float formationBlendProgress;
-    
+
+    public float desiredAttackDepth; //0-1, how close they'll get to the center of the enemy formation
+
 }
 public struct FormationEngagementData : IComponentData
 {
@@ -51,6 +53,8 @@ public struct FormationCombatData : IComponentData
     public float lastDeathHealth;
     public bool markedForDeath;
     public int healthPerTroop;
+    public bool formationWiped;
+
 }
 
 public struct FormationRenderData : IComponentData
@@ -81,6 +85,7 @@ public struct SoldierOffset : IBufferElementData
     public bool isMoving;
     public bool isEngaged;
     public bool isDead;
+    public byte animationGroup;
     public float deathTimer;
     public float speedModifier;
 }
