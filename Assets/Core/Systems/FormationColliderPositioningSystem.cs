@@ -27,15 +27,16 @@ public partial struct FormationColliderPositioningSystem : ISystem
                 int soldierCount = posData.ValueRO.soldierCount;
                 int rows = (int)math.ceil((float)soldierCount / columns);
 
-                float width = (columns - 1) * spacing + 1f; 
-                float depth = (rows - 1) * spacing + 1f;
+                // Ensure dimensions are large enough for the BevelRadius (0.05f requires min size > 0.1f)
+                float width = math.max(0.2f, (columns - 1) * spacing + 2.0f); 
+                float depth = math.max(0.2f, (rows - 1) * spacing + 2.0f);
                 float3 localCenter = new float3(0, .9f, -depth * .5f);
 
 
                 var newCollider = BoxCollider.Create(new BoxGeometry
                 {
                     Center = localCenter,
-                    Size = new float3(width, 2f, depth),
+                    Size = new float3(width*1.2f, 2f, depth*1.2f),
                     Orientation = quaternion.identity,
                     BevelRadius = 0.05f
                 },

@@ -151,13 +151,49 @@ public partial class PlayerInputSystem : SystemBase
                 dragCurrentPoint = hit.point;
             }
 
-            if (isRightClickDragging)
+            bool commandExecuted = false;
+
+            if (!isRightClickDragging)
             {
-                ExecuteReformCommand();
+                // Check if we clicked on an enemy formation
+                Entity closestEnemy = Entity.Null;
+                float closestDist = float.MaxValue;
+
+                foreach (var (pos, entity) in SystemAPI.Query<RefRO<FormationPositionData>>().WithNone<PlayerControlled>().WithEntityAccess())
+                {
+                    float dist = math.distance(new float2(pos.ValueRO.centerPosition.x, pos.ValueRO.centerPosition.z), new float2(dragCurrentPoint.x, dragCurrentPoint.z));
+                    
+                    int rows = (int)math.ceil((float)pos.ValueRO.soldierCount / pos.ValueRO.columns);
+                    float width = pos.ValueRO.columns * pos.ValueRO.spacing;
+                    float depth = rows * pos.ValueRO.spacing;
+                    float formationRadius = math.length(new float2(width, depth)) * 0.6f; 
+                    
+                    float selectionThreshold = math.max(3.0f, formationRadius);
+
+                    if (dist < selectionThreshold && dist < closestDist)
+                    {
+                        closestDist = dist;
+                        closestEnemy = entity;
+                    }
+                }
+
+                if (closestEnemy != Entity.Null)
+                {
+                    ExecuteAttackCommand(closestEnemy);
+                    commandExecuted = true;
+                }
             }
-            else
+
+            if (!commandExecuted)
             {
-                ExecuteMoveCommand(dragCurrentPoint);
+                if (isRightClickDragging)
+                {
+                    ExecuteReformCommand();
+                }
+                else
+                {
+                    ExecuteMoveCommand(dragCurrentPoint);
+                }
             }
 
             isRightClickDragging = false;
@@ -165,6 +201,20 @@ public partial class PlayerInputSystem : SystemBase
             {
                 previewVisualizer.IsDragging = false;
             }
+        }
+    }
+
+    private void ExecuteAttackCommand(Entity targetEnemy)
+    {
+        var enemyPos = SystemAPI.GetComponent<FormationPositionData>(targetEnemy);
+
+        foreach (var (group, colliderData) in SystemAPI.Query<RefRW<FormationPositionData>, RefRW<FormationColliderData>>().WithAll<FormationSelected>())
+        {
+            group.ValueRW.targetPosition = enemyPos.centerPosition + new float3(1, 0 ,1);
+            float3 enemyForward = math.mul(enemyPos.facing, new float3(0, 0, 1));
+            group.ValueRW.targetFacing = quaternion.LookRotationSafe(-enemyForward, math.up());
+            group.ValueRW.formationState = FormationState.rotating;
+            colliderData.ValueRW.needsRebuilt = true;
         }
     }
 

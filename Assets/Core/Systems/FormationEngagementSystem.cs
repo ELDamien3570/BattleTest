@@ -62,14 +62,21 @@ struct ProcessEngagementsJob : ITriggerEventsJob
         bool bMoved = HasMoved(posB, engDataB);
 
         // Check if formations are rebuilding or reshaping (internal movement)
-        // We must check reshaping because the formation center/rotation remains static (HasMoved = false)
-        // while soldiers move internally.
         bool aReforming = posA.formationState == FormationState.rebuilding || posA.formationState == FormationState.reshaping;
         bool bReforming = posB.formationState == FormationState.rebuilding || posB.formationState == FormationState.reshaping;
 
         // Skip if neither formation moved, neither is reforming, and both were already processed
         if (!aMoved && !bMoved && !aReforming && !bReforming && !engDataA.needsEngagementUpdate && !engDataB.needsEngagementUpdate)
-            return;
+        {
+            // FIX: Restore targetFormation because ClearEngagementSystem wipes it every frame.
+            // Without this, stationary formations lose their target and stop dealing damage.
+            engDataA.targetFormation = entityB;
+            EngagementDataLookup[entityA] = engDataA;
+
+            engDataB.targetFormation = entityA;
+            EngagementDataLookup[entityB] = engDataB;
+             return;
+        }
 
         var offsetsA = OffsetLookup[entityA];
         var offsetsB = OffsetLookup[entityB];
