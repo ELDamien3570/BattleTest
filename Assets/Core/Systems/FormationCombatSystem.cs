@@ -22,7 +22,8 @@ public partial struct FormationCombatSystem : ISystem
                 {
                     var enemyGroup = engagementData.ValueRO.targetFormation;
 
-                    if (enemyGroup != null)
+                    // Check if the entity is valid and exists before accessing it
+                    if (enemyGroup != Entity.Null && state.EntityManager.Exists(enemyGroup))
                     {
                         var enemyCombatData = SystemAPI.GetComponent<FormationCombatData>(enemyGroup);
                         enemyCombatData.formationHealth -= damageThisFrame;
@@ -88,7 +89,6 @@ public partial struct DeadSoldierRemovalSystem : ISystem
             var offsets = bufferLookup[entity];
             bool needsRebuild = false;
 
-            // Iterate backwards for safe removal
             for (int i = offsets.Length - 1; i >= 0; i--)
             {
                 var soldier = offsets[i];

@@ -59,7 +59,6 @@ public class RTSCamera : MonoBehaviour
     public LayerMask groundMask = ~0;
     public float cameraHeightOffset = 0f;
 
-    // --- Input System ---
     private InputSystem_Actions controls; 
     private Vector2 moveInput;              
     private Vector2 rotateInput;             
@@ -204,7 +203,8 @@ public class RTSCamera : MonoBehaviour
         cam.transform.localEulerAngles = e;
     }
 
-    // --- Helpers ---
+    //Helpers
+    #region 
     void ClampPivotToBounds()
     {
         if (lockWithinBounds && worldBoundsCollider)
@@ -240,4 +240,6 @@ public class RTSCamera : MonoBehaviour
             pivot.position = new Vector3(pivot.position.x, hit.point.y + cameraHeightOffset, pivot.position.z);
         }
     }
+
+    #endregion 
 }

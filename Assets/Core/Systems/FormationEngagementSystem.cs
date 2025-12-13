@@ -61,8 +61,14 @@ struct ProcessEngagementsJob : ITriggerEventsJob
         bool aMoved = HasMoved(posA, engDataA);
         bool bMoved = HasMoved(posB, engDataB);
 
-        // Skip if neither formation moved and both were already processed
-        if (!aMoved && !bMoved && !engDataA.needsEngagementUpdate && !engDataB.needsEngagementUpdate)
+        // Check if formations are rebuilding or reshaping (internal movement)
+        // We must check reshaping because the formation center/rotation remains static (HasMoved = false)
+        // while soldiers move internally.
+        bool aReforming = posA.formationState == FormationState.rebuilding || posA.formationState == FormationState.reshaping;
+        bool bReforming = posB.formationState == FormationState.rebuilding || posB.formationState == FormationState.reshaping;
+
+        // Skip if neither formation moved, neither is reforming, and both were already processed
+        if (!aMoved && !bMoved && !aReforming && !bReforming && !engDataA.needsEngagementUpdate && !engDataB.needsEngagementUpdate)
             return;
 
         var offsetsA = OffsetLookup[entityA];
@@ -122,8 +128,6 @@ struct ProcessEngagementsJob : ITriggerEventsJob
         float3 lineEndWorld = enemyFrontCenter + enemyRight * enemyHalfWidth;
 
         // 2. Transform Enemy Line into THIS Formation's Local Space
-        // This allows us to compare against soldier.currentOffset directly, avoiding 
-        // a matrix rotation for every single soldier in the loop.
         quaternion inverseRot = math.inverse(pos.facing);
         float3 localLineStart = math.rotate(inverseRot, lineStartWorld - pos.centerPosition);
         float3 localLineEnd = math.rotate(inverseRot, lineEndWorld - pos.centerPosition);
@@ -134,8 +138,6 @@ struct ProcessEngagementsJob : ITriggerEventsJob
         float invLineLenSq = (lineLenSq > 0.0001f) ? 1.0f / lineLenSq : 0.0f;
 
         // 4. Calculate AABB Bounds for fast culling
-        // We only check soldiers that are within the bounding box of the enemy line + engagement distance.
-        // This effectively skips all soldiers in the back rows.
         float engagementDist = math.sqrt(engagementDistSq);
         
         float minZ = math.min(localLineStart.z, localLineEnd.z) - engagementDist;
@@ -209,16 +211,8 @@ partial struct ClearEngagementsJob : IJobEntity
                 var soldier = offsets[i];
                 if (soldier.isEngaged)
                 {
-                    if (soldier.isMoving || soldier.isDead)
-                    {
                         soldier.isEngaged = false;
                         offsets[i] = soldier;
-                    }
-                    else
-                    {
-                        soldier.isEngaged = true;
-                        offsets[i] = soldier;
-                    }
                 }
             }
             engagementData.isEngaged = false;
