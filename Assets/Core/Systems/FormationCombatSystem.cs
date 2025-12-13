@@ -9,17 +9,18 @@ public partial struct FormationCombatSystem : ISystem
     {
         float deltaTime = SystemAPI.Time.DeltaTime;
 
-        // Apply damage and mark formations for death
-        foreach (var (offsets, engagementData, combatdata) in
+        foreach (var (offsets, engagementData, combatData) in
             SystemAPI.Query<DynamicBuffer<SoldierOffset>, RefRO<FormationEngagementData>, RefRW<FormationCombatData>>())
         {
-            float damageThisFrame = combatdata.ValueRO.meleeDamage * deltaTime;
+            float damageThisFrame = combatData.ValueRO.meleeDamage * deltaTime;
 
+            int engagedCount = 0;
             for (int i = 0; i < offsets.Length; i++)
             {
                 var soldier = offsets[i];
                 if (soldier.isEngaged)
                 {
+                    engagedCount++;
                     var enemyGroup = engagementData.ValueRO.targetFormation;
 
                     if (enemyGroup != Entity.Null && state.EntityManager.Exists(enemyGroup))
@@ -27,31 +28,33 @@ public partial struct FormationCombatSystem : ISystem
                         var enemyCombatData = SystemAPI.GetComponent<FormationCombatData>(enemyGroup);
                         float defenseThisFrame = enemyCombatData.meleeDefense * deltaTime;
                         float totalDamageThisFrame = damageThisFrame - defenseThisFrame;
-                        if (totalDamageThisFrame <= 0)
-                        {
-                            totalDamageThisFrame = 0.1f;
-                        }
+                        totalDamageThisFrame = totalDamageThisFrame > 0 ? totalDamageThisFrame : 0.1f;
+
                         enemyCombatData.formationHealth -= totalDamageThisFrame;
-
-                        if (enemyCombatData.formationHealth < 0) enemyCombatData.formationHealth = 0;
-
                         SystemAPI.SetComponent(enemyGroup, enemyCombatData);
                     }
                 }
             }
 
-            // Check for individual death
-            float healthDif = combatdata.ValueRO.lastDeathHealth - combatdata.ValueRO.formationHealth;
-            if (healthDif > combatdata.ValueRO.healthPerTroop)
+            int livingSoldiers = 0;
+            for (int i = 0; i < offsets.Length; i++)
             {
-                combatdata.ValueRW.markedForDeath = true;
+                if (!offsets[i].isDead) livingSoldiers++;
             }
 
-            // Check for full formation wipe
-            if (combatdata.ValueRO.formationHealth <= 0)
+            int expectedSoldiers = (int)System.Math.Ceiling(combatData.ValueRO.formationHealth / combatData.ValueRO.healthPerTroop);
+            expectedSoldiers = expectedSoldiers < 0 ? 0 : expectedSoldiers;
+
+            int deathsNeeded = livingSoldiers - expectedSoldiers;
+
+            if (deathsNeeded > 0)
             {
-                combatdata.ValueRW.formationWiped = true;
-                combatdata.ValueRW.formationHealth = 0;
+                combatData.ValueRW.deathsQueued = deathsNeeded;
+            }
+
+            if (combatData.ValueRO.formationHealth <= 0 && livingSoldiers > 0 && expectedSoldiers == 0)
+            {
+                combatData.ValueRW.formationWiped = true;
             }
         }
 
@@ -65,10 +68,9 @@ partial struct KillSoldiersJob : IJobEntity
 {
     public void Execute(ref DynamicBuffer<SoldierOffset> offsets, ref FormationCombatData combatData)
     {
-        uint seed = 35 * 70;
+        uint seed = (uint)(offsets.Length * 31 + 17);
         var rng = new Unity.Mathematics.Random(seed);
 
-        //formation wipe
         if (combatData.formationWiped)
         {
             for (int i = 0; i < offsets.Length; i++)
@@ -79,34 +81,48 @@ partial struct KillSoldiersJob : IJobEntity
                     soldier.isDead = true;
                     soldier.isEngaged = false;
                     soldier.isMoving = false;
-                    soldier.deathTimer = rng.NextFloat(0f, 0.3f); 
+                    soldier.deathTimer = rng.NextFloat(0f, 0.3f);
                     offsets[i] = soldier;
                 }
             }
             combatData.formationWiped = false;
-            combatData.markedForDeath = false;
+            combatData.deathsQueued = 0;
             return;
         }
 
-        //single death
-        if (!combatData.markedForDeath) return;
+        if (combatData.deathsQueued <= 0) return;
 
-        for (int i = 0; i < offsets.Length; i++)
+        int killed = 0;
+
+        for (int i = 0; i < offsets.Length && killed < combatData.deathsQueued; i++)
         {
             var soldier = offsets[i];
-            if (soldier.isEngaged)
+            if (soldier.isEngaged && !soldier.isDead)
             {
                 soldier.isDead = true;
                 soldier.isEngaged = false;
                 soldier.isMoving = false;
-                soldier.deathTimer = rng.NextFloat(0f, 0.3f);
+                soldier.deathTimer = rng.NextFloat(0f, 0.15f);
                 offsets[i] = soldier;
-
-                combatData.markedForDeath = false;
-                combatData.lastDeathHealth = combatData.formationHealth;
-                break;
+                killed++;
             }
         }
+
+        for (int i = 0; i < offsets.Length && killed < combatData.deathsQueued; i++)
+        {
+            var soldier = offsets[i];
+            if (!soldier.isDead)
+            {
+                soldier.isDead = true;
+                soldier.isEngaged = false;
+                soldier.isMoving = false;
+                soldier.deathTimer = rng.NextFloat(0f, 0.15f);
+                offsets[i] = soldier;
+                killed++;
+            }
+        }
+
+        combatData.deathsQueued = 0;
     }
 }
 
@@ -117,12 +133,12 @@ public partial struct DeadSoldierRemovalSystem : ISystem
     public void OnUpdate(ref SystemState state)
     {
         float deltaTime = SystemAPI.Time.DeltaTime;
-        float deathAnimationDuration = 2;
-
+        float deathAnimationDuration = 2f;
 
         var bufferLookup = SystemAPI.GetBufferLookup<SoldierOffset>(false);
 
-        foreach (var (positionData, colliderData, combatData, entity) in SystemAPI.Query<RefRW<FormationPositionData>, RefRW<FormationColliderData>, RefRW<FormationCombatData>>().WithEntityAccess())
+        foreach (var (positionData, colliderData, combatData, entity) in
+            SystemAPI.Query<RefRW<FormationPositionData>, RefRW<FormationColliderData>, RefRW<FormationCombatData>>().WithEntityAccess())
         {
             if (!bufferLookup.HasBuffer(entity)) continue;
 
@@ -159,5 +175,4 @@ public partial struct DeadSoldierRemovalSystem : ISystem
             }
         }
     }
-
 }

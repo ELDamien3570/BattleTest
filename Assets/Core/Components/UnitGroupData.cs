@@ -50,10 +50,9 @@ public struct FormationCombatData : IComponentData
     public int meleeDamage;
     public int meleeDefense;
     public float formationHealth;
-    public float lastDeathHealth;
-    public bool markedForDeath;
     public int healthPerTroop;
     public bool formationWiped;
+    public int deathsQueued;
 
 }
 

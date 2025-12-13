@@ -180,7 +180,6 @@ public partial struct BattleSetupSystem : ISystem
                 meleeDefense = data.defense,
                 troopType = data.troopType,
                 formationHealth = data.formationHealth,
-                lastDeathHealth = data.formationHealth,
                 healthPerTroop = data.healthPerTroop,
             });
 
