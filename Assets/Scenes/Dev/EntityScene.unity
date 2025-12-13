@@ -149,14 +149,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleSetupAuthoring
   soldierType:
-  - playerInfantry
-  - HeavyCavalry
   - LightCavalry
   - Spearmen
+  - playerInfantry
   playerMat: playerCavArcher
   aiMat: playerInfantry
-  soldiersPerSide: 200
-  formationsPerSide: 10
+  soldiersPerSide: 300
+  formationsPerSide: 40
   playerStartLocation: {x: 800, y: 0, z: 1100}
   aiStartLocation: {x: 800, y: 0, z: 1000}
 --- !u!4 &667910218
