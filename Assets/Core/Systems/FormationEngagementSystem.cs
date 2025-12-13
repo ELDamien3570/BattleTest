@@ -6,6 +6,44 @@ using Unity.Mathematics;
 using Unity.Burst;
 
 [UpdateInGroup(typeof(PhysicsSystemGroup))]
+[UpdateBefore(typeof(PhysicsSimulationGroup))]
+public partial struct ClearEngagementSystem : ISystem
+{
+    [BurstCompile]
+    public void OnUpdate(ref SystemState state)
+    {
+        // Reverted to the stable "Clear All" approach.
+        // This runs before physics, clearing the state.
+        // The EngagementSystem runs after physics and re-applies state for valid engagements.
+
+        var bufferLookup = SystemAPI.GetBufferLookup<SoldierOffset>(false);
+
+        foreach (var (engagementData, entity) in SystemAPI.Query<RefRW<FormationEngagementData>>().WithEntityAccess())
+        {
+            if (engagementData.ValueRO.isEngaged)
+            {
+                engagementData.ValueRW.isEngaged = false;
+                engagementData.ValueRW.targetFormation = Entity.Null;
+
+                if (bufferLookup.HasBuffer(entity))
+                {
+                    var offsets = bufferLookup[entity];
+                    for (int i = 0; i < offsets.Length; i++)
+                    {
+                        var soldier = offsets[i];
+                        if (soldier.isEngaged)
+                        {
+                            soldier.isEngaged = false;
+                            offsets[i] = soldier;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+[UpdateInGroup(typeof(PhysicsSystemGroup))]
 [UpdateAfter(typeof(PhysicsSimulationGroup))]
 public partial struct FormationEngagementSystem : ISystem
 {
@@ -24,7 +62,7 @@ public partial struct FormationEngagementSystem : ISystem
             PositionLookup = SystemAPI.GetComponentLookup<FormationPositionData>(true),
             EngagementDataLookup = SystemAPI.GetComponentLookup<FormationEngagementData>(false),
             OffsetLookup = SystemAPI.GetBufferLookup<SoldierOffset>(false),
-            EngagementDistance = 1.5f // Tightened range to prevent back-rank engagement
+            EngagementDistance = 1.5f
         }.Schedule(simulation, state.Dependency);
     }
 }
@@ -56,34 +94,42 @@ struct ProcessEngagementsJob : ITriggerEventsJob
 
         float engagementDistSq = EngagementDistance * EngagementDistance;
 
-        // Calculate formation dimensions
-        float widthA = math.max(0, (posA.columns - 1) * posA.spacing);
-        float depthA = math.max(0, (posA.rows - 1) * posA.spacing);
+        // MATCHING COLLIDER GENERATION LOGIC:
+        // The collider system uses: ((columns - 1) * spacing + 2.0f) * 1.1f
+        // We must use the same dimensions to ensure the OBB check matches the trigger event.
+        
+        float rawWidthA = (posA.columns - 1) * posA.spacing + 2.0f;
+        float rawDepthA = (int)math.ceil((float)posA.soldierCount / posA.columns) * posA.spacing + 2.0f; // Using calculated rows
+        
+        float widthA = math.max(0.2f, rawWidthA) * 1.1f;
+        float depthA = math.max(0.2f, rawDepthA) * 1.1f;
 
-        float widthB = math.max(0, (posB.columns - 1) * posB.spacing);
-        float depthB = math.max(0, (posB.rows - 1) * posB.spacing);
+        float rawWidthB = (posB.columns - 1) * posB.spacing + 2.0f;
+        float rawDepthB = (int)math.ceil((float)posB.soldierCount / posB.columns) * posB.spacing + 2.0f;
+        
+        float widthB = math.max(0.2f, rawWidthB) * 1.1f;
+        float depthB = math.max(0.2f, rawDepthB) * 1.1f;
 
-        // Check if soldiers are within engagement distance of the enemy formation's bounds
-        bool anyEngagedA = FlagSoldiersInEngagementRange(ref offsetsA, posA, posB, widthB, depthB, engagementDistSq);
+        // Process A against B
+        bool anyEngagedA = UpdateSoldierEngagement(ref offsetsA, posA, posB, widthB, depthB, engagementDistSq);
         
         if (anyEngagedA)
         {
             var engDataA = EngagementDataLookup[entityA];
             engDataA.isEngaged = true;
-            engDataA.needsEngagementUpdate = false;
             engDataA.targetFormation = entityB;
             engDataA.lastEngagementPos = posA.centerPosition;
             engDataA.lastEngagementRot = posA.facing;
             EngagementDataLookup[entityA] = engDataA;
         }
 
-        bool anyEngagedB = FlagSoldiersInEngagementRange(ref offsetsB, posB, posA, widthA, depthA, engagementDistSq);
+        // Process B against A
+        bool anyEngagedB = UpdateSoldierEngagement(ref offsetsB, posB, posA, widthA, depthA, engagementDistSq);
 
         if (anyEngagedB)
         {
             var engDataB = EngagementDataLookup[entityB];
             engDataB.isEngaged = true;
-            engDataB.needsEngagementUpdate = false;
             engDataB.targetFormation = entityA;
             engDataB.lastEngagementPos = posB.centerPosition;
             engDataB.lastEngagementRot = posB.facing;
@@ -91,7 +137,7 @@ struct ProcessEngagementsJob : ITriggerEventsJob
         }
     }
 
-    private bool FlagSoldiersInEngagementRange(
+    private bool UpdateSoldierEngagement(
         ref DynamicBuffer<SoldierOffset> offsets,
         FormationPositionData myPos,
         FormationPositionData enemyPos,
@@ -101,86 +147,51 @@ struct ProcessEngagementsJob : ITriggerEventsJob
     {
         bool anyEngaged = false;
 
-        // Prepare Enemy Transformation
-        // The formation anchor (centerPosition) is at the FRONT center of the formation.
+        // The collider is anchored at the Front Center (Z=0 relative to formation center? No.)
+        // In ColliderSystem: Center = new float3(0, .9f, -depth * .5f);
+        // This means the collider box is centered at -depth/2.
+        // So it extends from Z=0 (Front) to Z=-depth (Rear).
+        
         float3 enemyAnchor = enemyPos.centerPosition; 
         quaternion enemyInverseRot = math.inverse(enemyPos.facing);
         
-        // Define Enemy Bounds in Local Space relative to the anchor.
-        // X is centered: [-Width/2, Width/2]
-        // Z extends backwards: [-Depth, 0]
+        // Local Bounds relative to enemyAnchor
         float minX = -enemyWidth * 0.5f;
         float maxX = enemyWidth * 0.5f;
-        float minZ = -enemyDepth;
-        float maxZ = 0f;
+        float minZ = -enemyDepth; // Extends backwards
+        float maxZ = 0f;          // Ends at anchor
 
         for (int i = 0; i < offsets.Length; i++)
         {
             var soldier = offsets[i];
             
-            // Calculate Soldier World Position
-            float3 soldierWorldPos = myPos.centerPosition + math.rotate(myPos.facing, soldier.currentOffset);
+            if (soldier.isDead) continue;
 
-            // Transform Soldier to Enemy Local Space
+            float3 soldierWorldPos = myPos.centerPosition + math.rotate(myPos.facing, soldier.currentOffset);
             float3 localPos = math.rotate(enemyInverseRot, soldierWorldPos - enemyAnchor);
 
-            // Calculate distance to the Enemy Rectangle in local space
-            
-            // Distance in X
+            // Calculate distance to the OBB
             float dx = 0f;
             if (localPos.x < minX) dx = minX - localPos.x;
             else if (localPos.x > maxX) dx = localPos.x - maxX;
 
-            // Distance in Z
             float dz = 0f;
             if (localPos.z < minZ) dz = minZ - localPos.z;
             else if (localPos.z > maxZ) dz = localPos.z - maxZ;
             
             float distSq = dx * dx + dz * dz;
 
-            if (distSq < engagementDistSq && !soldier.isDead)
+            if (distSq < engagementDistSq)
             {
                 soldier.isEngaged = true;
-                offsets[i] = soldier;
                 anyEngaged = true;
+                offsets[i] = soldier;
             }
+            // We DO NOT set isEngaged = false here. 
+            // This prevents race conditions if the unit is overlapping multiple triggers.
+            // The ClearEngagementSystem handles the reset at the start of the frame.
         }
 
         return anyEngaged;
-    }
-}
-
-
-[UpdateInGroup(typeof(PhysicsSystemGroup))]
-[UpdateBefore(typeof(PhysicsSimulationGroup))]
-[BurstCompile]
-public partial struct ClearEngagementSystem : ISystem
-{
-    [BurstCompile]
-    public void OnUpdate(ref SystemState state)
-    {
-        foreach (var groups in SystemAPI.Query<RefRW<FormationEngagementData>>()) groups.ValueRW.targetFormation = default;
-        new ClearEngagementsJob().ScheduleParallel();
-    }
-}
-
-[BurstCompile]
-partial struct ClearEngagementsJob : IJobEntity
-{
-    public void Execute(ref DynamicBuffer<SoldierOffset> offsets, ref FormationEngagementData engagementData)
-    {
-        if (engagementData.isEngaged)
-        {
-            for (int i = 0; i < offsets.Length; i++)
-            {
-                var soldier = offsets[i];
-                if (soldier.isEngaged)
-                {
-                        soldier.isEngaged = false;
-                        offsets[i] = soldier;
-                }
-            }
-            engagementData.isEngaged = false;
-        }
     }
 }

@@ -24,7 +24,7 @@ public partial struct FormationRenderSystem : ISystem
     private static int[] deathCounts;
 
     // Timing offsets (in seconds) for each group
-    private static readonly float[] timingOffsets = { 0f, 0.25f, 0.5f, 0.75f };
+    private static readonly float[] timingOffsets = { 0f, 0.11f, 0.35f, 0.6f };
 
     public void OnCreate(ref SystemState state)
     {

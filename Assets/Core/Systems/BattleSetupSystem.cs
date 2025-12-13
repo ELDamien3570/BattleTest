@@ -258,7 +258,7 @@ public partial struct BattleSetupSystem : ISystem
         else if (soldierType.Contains(new FixedString32Bytes("HeavyCavalry")))
         {
             data.troopType = 2;
-            data.spacing = 3f;
+            data.spacing = 2f;
             data.moveSpeed = 13f;
             data.healthPerTroop = 1000;
             data.damage = 13;
@@ -268,7 +268,7 @@ public partial struct BattleSetupSystem : ISystem
         else if (soldierType.Contains(new FixedString32Bytes("LightCavalry")))
         {
             data.troopType = 3;
-            data.spacing = 3f;
+            data.spacing = 2f;
             data.moveSpeed = 15f;
             data.healthPerTroop = 800;
             data.damage = 10;

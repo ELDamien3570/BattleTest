@@ -36,7 +36,7 @@ public partial struct FormationColliderPositioningSystem : ISystem
                 var newCollider = BoxCollider.Create(new BoxGeometry
                 {
                     Center = localCenter,
-                    Size = new float3(width*1.1f, 2f, depth*1.1f),
+                    Size = new float3(width, 2f, depth*1.1f),
                     Orientation = quaternion.identity,
                     BevelRadius = 0.05f
                 },
