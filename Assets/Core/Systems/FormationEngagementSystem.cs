@@ -84,12 +84,14 @@ struct ProcessEngagementsJob : ITriggerEventsJob
         // Update engagement data
         engDataA.isEngaged = anyEngagedA;
         engDataA.needsEngagementUpdate = false;
+        engDataA.targetFormation = entityB;
         engDataA.lastEngagementPos = posA.centerPosition;
         engDataA.lastEngagementRot = posA.facing;
         EngagementDataLookup[entityA] = engDataA;
 
         engDataB.isEngaged = anyEngagedB;
         engDataB.needsEngagementUpdate = false;
+        engDataB.targetFormation = entityA;
         engDataB.lastEngagementPos = posB.centerPosition;
         engDataB.lastEngagementRot = posB.facing;
         EngagementDataLookup[entityB] = engDataB;
@@ -161,7 +163,7 @@ struct ProcessEngagementsJob : ITriggerEventsJob
             // Only considering X and Z distance as per original logic
             float distSq = diff.x * diff.x + diff.z * diff.z;
 
-            if (distSq < engagementDistSq)
+            if (distSq < engagementDistSq && !soldier.isDead && !soldier.isMoving)
             {
                 soldier.isEngaged = true;
                 offsets[i] = soldier;
@@ -183,6 +185,8 @@ public partial struct ClearEngagementSystem : ISystem
     [BurstCompile]
     public void OnUpdate(ref SystemState state)
     {
+        foreach (var groups in SystemAPI.Query<RefRW<FormationEngagementData>>()) groups.ValueRW.targetFormation = default;
+
         // Only clear formations that are flagged as engaged AND need update
         new ClearEngagementsJob().ScheduleParallel();
     }
@@ -205,8 +209,16 @@ partial struct ClearEngagementsJob : IJobEntity
                 var soldier = offsets[i];
                 if (soldier.isEngaged)
                 {
-                    soldier.isEngaged = false;
-                    offsets[i] = soldier;
+                    if (soldier.isMoving || soldier.isDead)
+                    {
+                        soldier.isEngaged = false;
+                        offsets[i] = soldier;
+                    }
+                    else
+                    {
+                        soldier.isEngaged = true;
+                        offsets[i] = soldier;
+                    }
                 }
             }
             engagementData.isEngaged = false;

@@ -71,7 +71,7 @@ public partial struct BattleSetupSystem : ISystem
         float soldierSpacing = 2f;
 
         int soldiersPerFormation = setupData.soldiersPerSide;
-        int columns = FormationBuilderUtility.CalculateSquareGridColumns(soldiersPerFormation);
+        int columns = FormationBuilderUtility.CalculateSquareGridColumns(soldiersPerFormation) + 10;
 
         float singleFormationWidth = (columns - 1) * soldierSpacing + 1f;
         float totalArmyWidth = (singleFormationWidth * formationCount) + (formationGap * (formationCount - 1));
@@ -106,33 +106,39 @@ public partial struct BattleSetupSystem : ISystem
 
             #region Determine troop type info from formation troop type
 
+
             int detTroopType = 0;
             float detSpacing = 1;
             float detMoveSpeed = 5;
+            int detHealthPerTroop = 100;
 
             if (currentSoldierType.Contains(new FixedString32Bytes("Infantry")))
             {
                 detTroopType = 0;
                 detSpacing = 2f;
                 detMoveSpeed = 7;
+                detHealthPerTroop = 150;
             }
             else if (currentSoldierType.Contains(new FixedString32Bytes("Archer")))
             {
                 detTroopType = 1;
                 detSpacing = 1.5f;
                 detMoveSpeed = 6;
+                detHealthPerTroop = 100;
             }
             else if (currentSoldierType.Contains(new FixedString32Bytes("Cavalry")))
             {
                 detTroopType = 2;
                 detSpacing = 3.5f;
                 detMoveSpeed = 13;
+                detHealthPerTroop = 300;
             }
             else if (currentSoldierType.Contains(new FixedString32Bytes("CavArcher")))
             {
                 detTroopType = 3;
                 detSpacing = 3f;
                 detMoveSpeed = 15;
+                detHealthPerTroop = 225;
             }
 
             float estRows = (setupData.soldiersPerSide / columns) + 1;
@@ -140,6 +146,8 @@ public partial struct BattleSetupSystem : ISystem
             float exactSingleFormWidth = (columns - 1) * detSpacing;
 
             float3 colliderCenter = new float3(0, .9f, -singleFormationDepth / 2);
+
+            int detFormationHealth = detHealthPerTroop * soldiersPerFormation;
 
             #endregion
 
@@ -232,7 +240,10 @@ public partial struct BattleSetupSystem : ISystem
             {
                 meleeDamage = 5,
                 meleeDefense = 5,
-                troopType = detTroopType
+                troopType = detTroopType,
+                formationHealth= detFormationHealth,
+                lastDeathHealth = detFormationHealth,
+                healthPerTroop = detHealthPerTroop,
             });
 
             eManager.AddBuffer<SoldierOffset>(formation);
@@ -251,7 +262,7 @@ public partial struct BattleSetupSystem : ISystem
         float soldierSpacing = 2f;
 
         int soldiersPerFormation = setupData.soldiersPerSide;
-        int columns = FormationBuilderUtility.CalculateSquareGridColumns(soldiersPerFormation);
+        int columns = FormationBuilderUtility.CalculateSquareGridColumns(soldiersPerFormation) + 10;
 
         float singleFormationWidth = (columns - 1) * soldierSpacing + 1f;
         float totalArmyWidth = (singleFormationWidth * formationCount) + (formationGap * (formationCount - 1));
@@ -289,30 +300,35 @@ public partial struct BattleSetupSystem : ISystem
             int detTroopType = 0;
             float detSpacing = 1;
             float detMoveSpeed = 5;
+            int detHealthPerTroop = 100;
 
             if (currentSoldierType.Contains(new FixedString32Bytes("Infantry")))
             {
                 detTroopType = 0;
                 detSpacing = 2f;
                 detMoveSpeed = 7;
+                detHealthPerTroop = 150;
             }
             else if (currentSoldierType.Contains(new FixedString32Bytes("Archer")))
             {
                 detTroopType = 1;
                 detSpacing = 1.5f;
                 detMoveSpeed = 6;
+                detHealthPerTroop = 100;
             }
             else if (currentSoldierType.Contains(new FixedString32Bytes("Cavalry")))
             {
                 detTroopType = 2;
                 detSpacing = 3.5f;
                 detMoveSpeed = 13;
+                detHealthPerTroop = 300;
             }
             else if (currentSoldierType.Contains(new FixedString32Bytes("CavArcher")))
             {
                 detTroopType = 3;
                 detSpacing = 3f;
                 detMoveSpeed = 15;
+                detHealthPerTroop = 225;
             }
 
             float estRows = (setupData.soldiersPerSide / columns) + 1;
@@ -320,6 +336,8 @@ public partial struct BattleSetupSystem : ISystem
             float exactSingleFormWidth = (columns - 1) * detSpacing;
 
             float3 colliderCenter = new float3(0, .9f, -singleFormationDepth / 2);
+
+            int detFormationHealth = detHealthPerTroop * soldiersPerFormation;
 
             #endregion
 
@@ -347,13 +365,9 @@ public partial struct BattleSetupSystem : ISystem
                 material = material
             });
 
-            // Check cache for existing collider blob
-            // Note: AI might need different filter/material, so we might need a different key or just create new ones if they differ significantly.
-            // However, in your code, the geometry is identical, only the filter differs.
-            // BoxCollider.Create bakes the filter into the blob. So we need a unique key for AI vs Player if filters differ.
             
             FixedString32Bytes cacheKey = currentSoldierType;
-            cacheKey.Append(new FixedString32Bytes("_AI")); // Differentiate AI colliders due to different Filter
+            cacheKey.Append(new FixedString32Bytes("_AI")); 
 
             if (!colliderCache.TryGetValue(cacheKey, out BlobAssetReference<Unity.Physics.Collider> colliderBlob))
             {
@@ -417,6 +431,9 @@ public partial struct BattleSetupSystem : ISystem
             {
                 meleeDamage = 5,
                 meleeDefense = 5,
+                healthPerTroop = detHealthPerTroop,
+                formationHealth = detFormationHealth,
+                lastDeathHealth = detFormationHealth,
                 troopType = detTroopType
             });
 

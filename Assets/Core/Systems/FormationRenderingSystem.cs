@@ -4,6 +4,10 @@ using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
 
+
+[UpdateInGroup(typeof(PresentationSystemGroup))]
+[UpdateAfter(typeof(FormationCombatSystem))]
+[UpdateAfter(typeof(DeadSoldierRemovalSystem))] 
 public partial struct FormationRenderSystem : ISystem
 {
     private static Dictionary<FixedString64Bytes, (AnimatedMeshScriptableObject so, Material mat)> renderCache;
@@ -12,6 +16,7 @@ public partial struct FormationRenderSystem : ISystem
     private static Matrix4x4[] idleMatrices;
     private static Matrix4x4[] movingMatrices;
     private static Matrix4x4[] combatMatrices;
+    private static Matrix4x4[] deathMatrices;
     private const int BatchSize = 1023;
 
     public void OnCreate(ref SystemState state)
@@ -22,6 +27,7 @@ public partial struct FormationRenderSystem : ISystem
             idleMatrices = new Matrix4x4[BatchSize];
             movingMatrices = new Matrix4x4[BatchSize];
             combatMatrices = new Matrix4x4[BatchSize];
+            deathMatrices = new Matrix4x4[BatchSize];
         }
     }
 
@@ -72,18 +78,22 @@ public partial struct FormationRenderSystem : ISystem
             var idleAnim = playerMeshes.Animations[0];
             var walkAnim = playerMeshes.Animations[1];
             var combatAnim = playerMeshes.Animations[2];
+            var deathAnim = playerMeshes.Animations[3];
 
             int idleFrameIndex = (int)(renderData.ValueRW.animationTimer / secondsPerFrame) % idleAnim.Meshes.Count;
             int walkFrameIndex = (int)(renderData.ValueRW.animationTimer / secondsPerFrame) % walkAnim.Meshes.Count;
             int combatFrameIndex = (int)(renderData.ValueRW.animationTimer / secondsPerFrame) % combatAnim.Meshes.Count;
+            int deathFrameIndex = (int)(renderData.ValueRW.animationTimer/secondsPerFrame) % deathAnim.Meshes.Count;
 
             Mesh idleMesh = idleAnim.Meshes[idleFrameIndex];
             Mesh walkMesh = walkAnim.Meshes[walkFrameIndex];
             Mesh combatMesh = combatAnim.Meshes[combatFrameIndex];
+            Mesh deathMesh  = deathAnim.Meshes[deathFrameIndex];    
 
             int idleCount = 0;
             int movingCount = 0;
             int combatCount = 0;
+            int deathCount = 0;
 
             for (int i = 0; i < offsets.Length; i++)
             {
@@ -109,6 +119,14 @@ public partial struct FormationRenderSystem : ISystem
                         movingCount = 0;
                     }
                 }
+                else if (offsets[i].isDead)
+                {
+                    deathMatrices[deathCount++] = matrix;
+                    if (deathCount == BatchSize)
+                    {
+                        Graphics.DrawMeshInstanced(deathMesh, 0, soldierMaterial, deathMatrices, deathCount);
+                    }
+                }
                 else
                 {
                     idleMatrices[idleCount++] = matrix;
@@ -126,6 +144,8 @@ public partial struct FormationRenderSystem : ISystem
                 Graphics.DrawMeshInstanced(walkMesh, 0, soldierMaterial, movingMatrices, movingCount);
             if (idleCount > 0)
                 Graphics.DrawMeshInstanced(idleMesh, 0, soldierMaterial, idleMatrices, idleCount);
+            if (deathCount > 0)
+                Graphics.DrawMeshInstanced(deathMesh, 0, soldierMaterial, deathMatrices, deathCount);
         }
     }
 }

@@ -30,7 +30,8 @@ public struct FormationPositionData : IComponentData
 public struct FormationEngagementData : IComponentData
 {
     public bool isEngaged;       
-    public bool needsEngagementUpdate; 
+    public bool needsEngagementUpdate;
+    public Entity targetFormation;
     public float3 lastEngagementPos;   
     public quaternion lastEngagementRot;
 }
@@ -46,6 +47,10 @@ public struct FormationCombatData : IComponentData
     public int troopType; //0 = infantry, 1 = archer, 2 = cav, 3 = cav archer
     public int meleeDamage;
     public int meleeDefense;
+    public float formationHealth;
+    public float lastDeathHealth;
+    public bool markedForDeath;
+    public int healthPerTroop;
 }
 
 public struct FormationRenderData : IComponentData
@@ -75,6 +80,8 @@ public struct SoldierOffset : IBufferElementData
     public quaternion facing;
     public bool isMoving;
     public bool isEngaged;
+    public bool isDead;
+    public float deathTimer;
     public float speedModifier;
 }
 public enum FormationState
