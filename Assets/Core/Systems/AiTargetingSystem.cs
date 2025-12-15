@@ -2,17 +2,19 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 
+[UpdateInGroup(typeof(InitializationSystemGroup), OrderLast = true)]
 public partial struct AiTargetingSystem : ISystem
 {
     public void OnUpdate(ref SystemState state)
     {
-        EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
         float deltaTime = SystemAPI.Time.DeltaTime;
 
         foreach (var (posData, engagementData, commandData, colliderData, combatData, entity) in SystemAPI.Query<RefRW<FormationPositionData>, RefRW<FormationEngagementData>, RefRW<AiCommandData>, RefRW<FormationColliderData>, 
             RefRO<FormationCombatData>>().WithAll<AiControlled>().WithEntityAccess())
         {
             commandData.ValueRW.timeSinceCommand += deltaTime;
+
+            if (combatData.ValueRO.formationWiped) continue;
 
             if (engagementData.ValueRO.isEngaged) continue;
 
@@ -29,7 +31,7 @@ public partial struct AiTargetingSystem : ISystem
                 else
                 {
                     var targetAny = FindClosestPlayerFormation(ref state, posData.ValueRO.centerPosition);
-                    if (target != Entity.Null)
+                    if (targetAny != Entity.Null)  
                     {
                         engagementData.ValueRW.targetFormation = targetAny;
                         ExecuteAttackCommand(ref state, posData, colliderData, targetAny);
@@ -39,14 +41,16 @@ public partial struct AiTargetingSystem : ISystem
                 }
             }
         }
-
-        ecb.Playback(state.EntityManager);
-        ecb.Dispose();
     }
 
     private void ExecuteAttackCommand(ref SystemState state, RefRW<FormationPositionData> aiPos, RefRW<FormationColliderData> aiCollider, Entity targetEnemy)
     {
+        if (!state.EntityManager.Exists(targetEnemy)) return;
+        if (!SystemAPI.HasComponent<FormationPositionData>(targetEnemy)) return;
+        
         var enemyPos = SystemAPI.GetComponent<FormationPositionData>(targetEnemy);
+        
+        if (enemyPos.columns <= 0 || enemyPos.soldierCount <= 0) return;
         
         int enemyRows = (int)math.ceil((float)enemyPos.soldierCount / enemyPos.columns);
         float enemyDepth = (enemyRows - 1) * enemyPos.spacing;
@@ -89,6 +93,10 @@ public partial struct AiTargetingSystem : ISystem
 
         foreach (var (pos, combat, entity) in SystemAPI.Query<RefRO<FormationPositionData>, RefRO<FormationCombatData>>().WithAll<PlayerControlled>().WithEntityAccess())
         {
+            // Skip wiped formations
+            if (combat.ValueRO.formationWiped) continue;
+            if (pos.ValueRO.soldierCount <= 0) continue;
+            
             if (combat.ValueRO.troopType != myTroopType) continue;
 
             float dist = GetFormationDistance(pos.ValueRO, point);
@@ -109,6 +117,9 @@ public partial struct AiTargetingSystem : ISystem
 
         foreach (var (pos, combat, entity) in SystemAPI.Query<RefRO<FormationPositionData>, RefRO<FormationCombatData>>().WithAll<PlayerControlled>().WithEntityAccess())
         {
+            // Skip wiped formations
+            if (combat.ValueRO.formationWiped) continue;
+            if (pos.ValueRO.soldierCount <= 0) continue;
            
             float dist = GetFormationDistance(pos.ValueRO, point);
 
@@ -120,6 +131,7 @@ public partial struct AiTargetingSystem : ISystem
         }
         return closest;
     }
+
     private float GetFormationDistance(FormationPositionData pos, float3 point)
     {
         return math.distance(new float2(pos.centerPosition.x, pos.centerPosition.z), new float2(point.x, point.z));

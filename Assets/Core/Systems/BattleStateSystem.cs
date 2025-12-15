@@ -1,7 +1,8 @@
 using Unity.Entities;
 using Unity.Burst;
 
-[UpdateInGroup(typeof(PresentationSystemGroup))]
+[UpdateInGroup(typeof(SimulationSystemGroup))]
+[UpdateAfter(typeof(FormationMovementSystem))]
 public partial struct BattleStateSystem : ISystem
 {
     private bool _battleStarted;

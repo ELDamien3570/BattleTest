@@ -34,7 +34,7 @@ public static class FormationBuilderUtility
                     facing = group.facing, 
                     isMoving = false,
                     animationGroup = (byte)random.NextInt(0, 4),
-                    speedModifier = random.NextFloat(0.6f, 2.15f) //randomize speed
+                    speedModifier = random.NextFloat(0.75f, 1.05f) //randomize speed
                 });
             }
 
@@ -123,7 +123,7 @@ public static class FormationBuilderUtility
             soldier.targetOffset = newTargets[i];
             soldier.isMoving = true;
 
-            soldier.speedModifier = random.NextFloat(0.85f, 1.15f); //randomize speed value
+            soldier.speedModifier = random.NextFloat(0.85f, 1.05f); //randomize speed value
             
             soldiers[i] = soldier;
         }
@@ -135,11 +135,17 @@ public static class FormationBuilderUtility
 
     public static int CalculateSquareGridColumns(int soldierCount)
     {
-        return (int)math.ceil(math.sqrt(soldierCount));
+        int ret = (int)math.ceil(math.sqrt(soldierCount));
+        if (ret < 1) return 1;
+
+        return ret;
     }
 
     public static int CalculateColumnsFromWidth(float width, float spacing = 1f)
     {
-        return math.max(1, (int)(width / spacing));
+        int ret = math.max(1, (int)(width / spacing));
+        if (ret < 1) return 1;
+
+        return ret;
     }
 }

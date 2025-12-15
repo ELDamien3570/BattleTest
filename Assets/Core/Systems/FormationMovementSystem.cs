@@ -11,10 +11,10 @@ public partial struct FormationMovementSystem : ISystem
         {
             float soldierMoveSpeed = movementData.ValueRW.moveSpeed;
             float movementThreshold = 0.05f;
-            float soldierRotationSpeed = movementData.ValueRW.rotationSpeed; //speed for individual soldier 
+            float soldierRotationSpeed = movementData.ValueRW.rotationSpeed; 
 
-            positionData.ValueRW.facing = math.normalize(positionData.ValueRW.facing);
-            positionData.ValueRW.targetFacing = math.normalize(positionData.ValueRW.targetFacing);
+            positionData.ValueRW.facing = SafeNormalize(positionData.ValueRW.facing); 
+            positionData.ValueRW.targetFacing = SafeNormalize(positionData.ValueRW.targetFacing); 
 
             //phase 1: rotating
             if (positionData.ValueRW.formationState == FormationState.rotating)
@@ -44,7 +44,7 @@ public partial struct FormationMovementSystem : ISystem
 
                 float angleDiff = AngleComparator(positionData.ValueRO.facing, positionData.ValueRO.targetFacing);
                 
-                if (angleDiff < positionData.ValueRO.facingTolerance) //review later
+                if (angleDiff < positionData.ValueRO.facingTolerance) 
                 {
                     quaternion snapDelta = math.mul(positionData.ValueRW.targetFacing, math.inverse(positionData.ValueRW.facing));
                     quaternion inverseSnap = math.inverse(snapDelta);
@@ -72,6 +72,8 @@ public partial struct FormationMovementSystem : ISystem
                 for (int i = 0; i < offsets.Length; i++)
                 {
                     SoldierOffset soldier = offsets[i];
+
+                    if (soldier.isDead) continue;
                     float3 toTarget = soldier.targetOffset - soldier.currentOffset;
                     float distance = math.length(toTarget);
 
@@ -140,6 +142,7 @@ public partial struct FormationMovementSystem : ISystem
                     for (int i = 0; i < offsets.Length; i++)
                     {
                         var soldier = offsets[i];
+                        if (soldier.isDead) continue;
                         soldier.isMoving = true;
                         
                         soldier.facing = math.slerp(soldier.facing, moveFacing, math.min(1f, soldierRotationSpeed * deltaTime));
@@ -171,6 +174,7 @@ public partial struct FormationMovementSystem : ISystem
                 {
                     var soldier = offsets[i];
                     
+                    if (soldier.isDead) continue;
                     soldier.facing = math.slerp(soldier.facing, positionData.ValueRW.facing, math.min(1f, soldierRotationSpeed * deltaTime));
                     
                     if (soldier.isMoving)
@@ -191,7 +195,16 @@ public partial struct FormationMovementSystem : ISystem
 
 
     }
-    
+
+
+    private static quaternion SafeNormalize(quaternion q)
+    {
+        float lengthSq = math.lengthsq(q.value);
+        if (lengthSq < 0.0001f)
+            return quaternion.identity;
+        return math.normalize(q);
+    }
+
     private static float AngleComparator(quaternion a, quaternion b)
     {
         float dot = math.abs(math.dot(a, b));

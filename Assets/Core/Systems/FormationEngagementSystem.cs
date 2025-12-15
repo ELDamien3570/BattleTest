@@ -41,7 +41,7 @@ public partial struct ClearEngagementSystem : ISystem
 }
 
 [UpdateInGroup(typeof(PhysicsSystemGroup))]
-[UpdateAfter(typeof(PhysicsSimulationGroup))]
+[UpdateAfter(typeof(ClearEngagementSystem))]
 public partial struct FormationEngagementSystem : ISystem
 {
     public void OnCreate(ref SystemState state)
@@ -82,6 +82,7 @@ struct ProcessEngagementsJob : ITriggerEventsJob
         if (!ColliderDataLookup.HasComponent(entityA) || !ColliderDataLookup.HasComponent(entityB)) return;
         if (!EngagementDataLookup.HasComponent(entityA) || !EngagementDataLookup.HasComponent(entityB)) return;
         if (!TransformLookup.HasComponent(entityA) || !TransformLookup.HasComponent(entityB)) return;
+        if (!OffsetLookup.HasBuffer(entityA) || !OffsetLookup.HasBuffer(entityB)) return;
 
         var colliderA = ColliderDataLookup[entityA];
         var colliderB = ColliderDataLookup[entityB];
@@ -94,7 +95,6 @@ struct ProcessEngagementsJob : ITriggerEventsJob
 
         float engagementDistSq = EngagementDistance * EngagementDistance;
 
-        //check a against b
         bool anyEngagedA = UpdateSoldierEngagement(ref offsetsA, transA, transB, colliderB.width, colliderB.depth, engagementDistSq);
         
         if (anyEngagedA)
@@ -107,7 +107,6 @@ struct ProcessEngagementsJob : ITriggerEventsJob
             EngagementDataLookup[entityA] = engDataA;
         }
 
-        //check b against a
         bool anyEngagedB = UpdateSoldierEngagement(ref offsetsB, transB, transA, colliderA.width, colliderA.depth, engagementDistSq);
 
         if (anyEngagedB)

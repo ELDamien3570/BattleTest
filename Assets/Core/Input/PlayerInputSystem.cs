@@ -2,9 +2,9 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.UIElements.Experimental;
 
-[UpdateInGroup(typeof(InitializationSystemGroup), OrderLast = true)]
+[UpdateInGroup(typeof(InitializationSystemGroup))]
+[UpdateAfter(typeof(FormationColliderPositioningSystem))]   
 public partial class PlayerInputSystem : SystemBase
 {
     private FormationPreviewVisualizer previewVisualizer;
@@ -73,7 +73,7 @@ public partial class PlayerInputSystem : SystemBase
                 }
             }
 
-           // if (engagementData.ValueRO.isEngaged) continue;
+            if (engagementData.ValueRO.isEngaged) continue;
 
             commandData.ValueRW.timeSinceCommand += deltaTime;
 
@@ -191,6 +191,8 @@ public partial class PlayerInputSystem : SystemBase
         int enemyRows = (int)math.ceil((float)enemyPos.soldierCount / enemyPos.columns);
         float enemyDepth = (enemyRows - 1) * enemyPos.spacing;
 
+        if (enemyPos.columns <= 0 || enemyPos.soldierCount <= 0) return;
+
         float3 enemyForward = math.forward(enemyPos.facing);
         float3 enemyRight = math.cross(math.up(), enemyForward);
         float3 enemyTrueCenter = enemyPos.centerPosition - enemyForward * (enemyDepth * 0.5f);
@@ -235,6 +237,8 @@ public partial class PlayerInputSystem : SystemBase
 
         int enemyRows = (int)math.ceil((float)enemyPos.soldierCount / enemyPos.columns);
         float enemyDepth = (enemyRows - 1) * enemyPos.spacing;
+
+        if (enemyPos.columns <= 0 || enemyPos.soldierCount <= 0) return;
 
         float3 enemyForward = math.forward(enemyPos.facing);
         float3 enemyRight = math.cross(math.up(), enemyForward);

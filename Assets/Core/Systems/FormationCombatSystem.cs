@@ -1,6 +1,7 @@
 using Unity.Burst;
 using Unity.Entities;
 using Unity.Jobs;
+using Unity.Physics;
 
 [UpdateInGroup(typeof(PresentationSystemGroup))]
 public partial struct FormationCombatSystem : ISystem
@@ -17,7 +18,7 @@ public partial struct FormationCombatSystem : ISystem
             for (int i = 0; i < offsets.Length; i++)
             {
                 var soldier = offsets[i];
-                if (soldier.isEngaged)
+                if (soldier.isEngaged && !soldier.isDead)
                 {
                     engagedCount++;
                     var enemyGroup = engagementData.ValueRO.targetFormation;
@@ -41,8 +42,14 @@ public partial struct FormationCombatSystem : ISystem
                 if (!offsets[i].isDead) livingSoldiers++;
             }
 
-            int expectedSoldiers = (int)System.Math.Ceiling(combatData.ValueRO.formationHealth / combatData.ValueRO.healthPerTroop);
-            expectedSoldiers = expectedSoldiers < 0 ? 0 : expectedSoldiers;
+            int expectedSoldiers = 0;
+            if (combatData.ValueRO.healthPerTroop > 0)
+            {
+                expectedSoldiers = (int)System.Math.Ceiling(
+                    combatData.ValueRO.formationHealth / combatData.ValueRO.healthPerTroop
+                );
+            }
+            expectedSoldiers = Unity.Mathematics.math.max(0, expectedSoldiers);
 
             int deathsNeeded = livingSoldiers - expectedSoldiers;
 
@@ -57,8 +64,8 @@ public partial struct FormationCombatSystem : ISystem
             }
         }
 
-        var jobHandle = new KillSoldiersJob().ScheduleParallel(state.Dependency);
-        jobHandle.Complete();
+        state.Dependency = new KillSoldiersJob().ScheduleParallel(state.Dependency);
+        state.Dependency.Complete();
     }
 }
 
@@ -125,8 +132,7 @@ partial struct KillSoldiersJob : IJobEntity
     }
 }
 
-[UpdateInGroup(typeof(PresentationSystemGroup))]
-[UpdateAfter(typeof(FormationCombatSystem))]
+[UpdateInGroup(typeof(InitializationSystemGroup), OrderFirst = true)]
 public partial struct DeadSoldierRemovalSystem : ISystem
 {
     public void OnUpdate(ref SystemState state)

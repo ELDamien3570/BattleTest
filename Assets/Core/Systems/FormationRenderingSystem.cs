@@ -1,12 +1,11 @@
 using System.Collections.Generic;
+using NUnit.Framework.Constraints;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using UnityEngine;
 
-[UpdateInGroup(typeof(PresentationSystemGroup))]
-[UpdateAfter(typeof(FormationCombatSystem))]
-[UpdateAfter(typeof(DeadSoldierRemovalSystem))]
+[UpdateInGroup(typeof(PresentationSystemGroup), OrderLast = true)]
 public partial struct FormationRenderSystem : ISystem
 {
     private static Dictionary<FixedString64Bytes, (AnimatedMeshScriptableObject so, Material mat)> renderCache;
@@ -15,11 +14,9 @@ public partial struct FormationRenderSystem : ISystem
     private const int TimingGroups = 4;
     private const int MaxDeathFrames = 60; 
 
-    //4 timing groups × 3 animation states (idle, walk, combat)
     private static Matrix4x4[][] soldierTransformBuckets;
     private static int[] livingCount;
 
-    //death buckets
     private static Matrix4x4[][] deadSoldierTransformBuckets;
     private static int[] deadCount;
 
@@ -33,7 +30,7 @@ public partial struct FormationRenderSystem : ISystem
         {
             renderCache = new Dictionary<FixedString64Bytes, (AnimatedMeshScriptableObject, Material)>();
 
-            //12 buckets for living soldiers: [idle0-3, walk0-3, combat0-3]
+            //idle0-3, walk0-3, combat0-3
             soldierTransformBuckets = new Matrix4x4[3 * TimingGroups][];
             livingCount = new int[3 * TimingGroups];
 
@@ -42,7 +39,6 @@ public partial struct FormationRenderSystem : ISystem
                 soldierTransformBuckets[i] = new Matrix4x4[BatchSize];
             }
 
-            //death buckets
             deadSoldierTransformBuckets = new Matrix4x4[MaxDeathFrames][];
             deadCount = new int[MaxDeathFrames];
 
@@ -102,11 +98,10 @@ public partial struct FormationRenderSystem : ISystem
 
             int deathFrameCount = deathAnim.Meshes.Count;
 
-            //pre-calculate frame indices for each timing group (living animations only)
+            //pre-calculate frame indices for each timing group
             int[] idleFrames = new int[TimingGroups];
             int[] walkFrames = new int[TimingGroups];
             int[] combatFrames = new int[TimingGroups];
-
             for (int g = 0; g < TimingGroups; g++)
             {
                 float groupTime = baseTime + animTimingOffsets[g];
@@ -137,7 +132,6 @@ public partial struct FormationRenderSystem : ISystem
 
                 Matrix4x4 matrix = Matrix4x4.TRS(soldierWorldPos, offsets[i].facing, Vector3.one);
 
-                //death
                 if (offsets[i].isDead)
                 {
                     int deathFrame = (int)(offsets[i].deathTimer / secondsPerFrame);

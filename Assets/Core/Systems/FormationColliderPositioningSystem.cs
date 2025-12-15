@@ -5,13 +5,17 @@ using Unity.Transforms;
 
 [UpdateInGroup(typeof(InitializationSystemGroup))]
 public partial struct FormationColliderPositioningSystem : ISystem
-{ 
-
+{
+    public void OnCreate(ref SystemState state)
+    {
+        state.RequireForUpdate<SimulationSingleton>();
+    }
     public void OnUpdate(ref SystemState state)
     {
+        state.CompleteDependency();
         var ecb = new EntityCommandBuffer(Unity.Collections.Allocator.Temp);
 
-        foreach (var (posData, colliderData, transform, entity) in SystemAPI.Query<RefRO<FormationPositionData>, RefRW<FormationColliderData>, RefRW<LocalTransform>>().WithAll<PhysicsCollider>().WithEntityAccess())
+        foreach (var (posData, colliderData, transform, physicsCollider, entity) in SystemAPI.Query<RefRO<FormationPositionData>, RefRW<FormationColliderData>, RefRW<LocalTransform>, RefRW<PhysicsCollider>>().WithEntityAccess())
         {
             transform.ValueRW.Position = posData.ValueRO.centerPosition;
             transform.ValueRW.Rotation = posData.ValueRO.facing;
@@ -22,6 +26,7 @@ public partial struct FormationColliderPositioningSystem : ISystem
 
             if (columnsChanged || countChanged || manualRebuild)
             {
+
                 float spacing = colliderData.ValueRO.spacing;
                 int columns = posData.ValueRO.columns;
                 int soldierCount = posData.ValueRO.soldierCount;
@@ -29,7 +34,13 @@ public partial struct FormationColliderPositioningSystem : ISystem
 
                 float width = math.max(0.2f, (columns - 1) * spacing + 2.0f); 
                 float depth = math.max(0.2f, (rows - 1) * spacing + 2.0f);
-                float3 localCenter = new float3(0, .9f, -depth * .5f);
+
+                float3 localCenter;
+
+                if (width < 1) width = 1.5f;
+                if (depth < 1) depth = 1.5f;
+                if (depth < 1 || width < 1) { localCenter = new float3(0, .9f, 0); }
+                else { localCenter = new float3(0, .9f, -depth * .5f); }
 
                 var newCollider = BoxCollider.Create(new BoxGeometry
                 {

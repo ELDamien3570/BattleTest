@@ -107,6 +107,9 @@ public partial struct BattleSetupSystem : ISystem
                 FixedString32Bytes cacheKey = data.soldierType;
                 if (!isPlayer) cacheKey.Append("_AI");
 
+                if (data.formationDepth < 1) data.formationWidth = 1.5f;
+                if (data.formationDepth < 1) data.formationDepth = 1.5f;
+
                 if (!colliderCache.TryGetValue(cacheKey, out var colliderBlob))
                 {
                     colliderBlob = BoxCollider.Create(new BoxGeometry
@@ -114,7 +117,7 @@ public partial struct BattleSetupSystem : ISystem
                         Center = colliderCenter,
                         Size = new float3(data.formationWidth, 2f, data.formationDepth),
                         Orientation = quaternion.identity,
-                        BevelRadius = 0.05f
+                        BevelRadius = 0.1f
                     },
                     filter,
                     FormationPhysics.TriggerMaterial);
@@ -248,8 +251,8 @@ public partial struct BattleSetupSystem : ISystem
             data.troopType = 0;
             data.spacing = 1.5f;
             data.moveSpeed = 7f;
-            data.healthPerTroop = 400;
-            data.damage = 8;
+            data.healthPerTroop = 250;
+            data.damage = 15;
             data.defense = 5;
             data.attackDepth = 0.1f;
         }
@@ -258,8 +261,8 @@ public partial struct BattleSetupSystem : ISystem
             data.troopType = 1;
             data.spacing = 1.25f;
             data.moveSpeed = 5f;
-            data.healthPerTroop = 350;
-            data.damage = 6;
+            data.healthPerTroop = 175;
+            data.damage = 10;
             data.defense = 10;
             data.attackDepth = 0.1f;
         }
@@ -269,18 +272,18 @@ public partial struct BattleSetupSystem : ISystem
             data.spacing = 2f;
             data.moveSpeed = 13f;
             data.healthPerTroop = 1000;
-            data.damage = 13;
+            data.damage = 130;
             data.defense = 8;
             data.attackDepth = 0.5f;
         }
         else if (soldierType.Contains(new FixedString32Bytes("LightCavalry")))
         {
             data.troopType = 3;
-            data.spacing = 2f;
-            data.moveSpeed = 15f;
-            data.healthPerTroop = 800;
-            data.damage = 10;
-            data.defense = 4;
+            data.spacing = 2.5f;
+            data.moveSpeed = 12f;
+            data.healthPerTroop = 400;
+            data.damage = 25;
+            data.defense = 2;
             data.attackDepth = .6f;
         }
 
