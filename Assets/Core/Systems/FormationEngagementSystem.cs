@@ -56,7 +56,7 @@ public partial struct FormationEngagementSystem : ISystem
 
         state.Dependency = new ProcessEngagementsJob
         {
-            PositionLookup = SystemAPI.GetComponentLookup<FormationPositionData>(true),
+            ColliderDataLookup = SystemAPI.GetComponentLookup<FormationColliderData>(true),
             TransformLookup = SystemAPI.GetComponentLookup<LocalTransform>(true),
             EngagementDataLookup = SystemAPI.GetComponentLookup<FormationEngagementData>(false),
             OffsetLookup = SystemAPI.GetBufferLookup<SoldierOffset>(false),
@@ -68,7 +68,7 @@ public partial struct FormationEngagementSystem : ISystem
 [BurstCompile]
 struct ProcessEngagementsJob : ITriggerEventsJob
 {
-    [ReadOnly] public ComponentLookup<FormationPositionData> PositionLookup;
+    [ReadOnly] public ComponentLookup<FormationColliderData> ColliderDataLookup;
     [ReadOnly] public ComponentLookup<LocalTransform> TransformLookup;
     public ComponentLookup<FormationEngagementData> EngagementDataLookup;
     public BufferLookup<SoldierOffset> OffsetLookup;
@@ -79,15 +79,13 @@ struct ProcessEngagementsJob : ITriggerEventsJob
         Entity entityA = triggerEvent.EntityA;
         Entity entityB = triggerEvent.EntityB;
 
-        // Check for components
-        if (!PositionLookup.HasComponent(entityA) || !PositionLookup.HasComponent(entityB)) return;
+        if (!ColliderDataLookup.HasComponent(entityA) || !ColliderDataLookup.HasComponent(entityB)) return;
         if (!EngagementDataLookup.HasComponent(entityA) || !EngagementDataLookup.HasComponent(entityB)) return;
         if (!TransformLookup.HasComponent(entityA) || !TransformLookup.HasComponent(entityB)) return;
 
-        var posA = PositionLookup[entityA];
-        var posB = PositionLookup[entityB];
+        var colliderA = ColliderDataLookup[entityA];
+        var colliderB = ColliderDataLookup[entityB];
         
-        // Use LocalTransform for Physics-Synchronized Position/Rotation
         var transA = TransformLookup[entityA];
         var transB = TransformLookup[entityB];
         
@@ -96,19 +94,8 @@ struct ProcessEngagementsJob : ITriggerEventsJob
 
         float engagementDistSq = EngagementDistance * EngagementDistance;
 
-        // Calculate Dimensions (Same as Collider System)
-        float rawWidthA = (posA.columns - 1) * posA.spacing + 2.0f;
-        float rawDepthA = (int)math.ceil((float)posA.soldierCount / posA.columns) * posA.spacing + 2.0f;
-        float widthA = math.max(0.2f, rawWidthA) * 1.1f;
-        float depthA = math.max(0.2f, rawDepthA) * 1.1f;
-
-        float rawWidthB = (posB.columns - 1) * posB.spacing + 2.0f;
-        float rawDepthB = (int)math.ceil((float)posB.soldierCount / posB.columns) * posB.spacing + 2.0f;
-        float widthB = math.max(0.2f, rawWidthB) * 1.1f;
-        float depthB = math.max(0.2f, rawDepthB) * 1.1f;
-
-        // Process A against B
-        bool anyEngagedA = UpdateSoldierEngagement(ref offsetsA, transA, transB, widthB, depthB, engagementDistSq);
+        //check a against b
+        bool anyEngagedA = UpdateSoldierEngagement(ref offsetsA, transA, transB, colliderB.width, colliderB.depth, engagementDistSq);
         
         if (anyEngagedA)
         {
@@ -120,8 +107,8 @@ struct ProcessEngagementsJob : ITriggerEventsJob
             EngagementDataLookup[entityA] = engDataA;
         }
 
-        // Process B against A
-        bool anyEngagedB = UpdateSoldierEngagement(ref offsetsB, transB, transA, widthA, depthA, engagementDistSq);
+        //check b against a
+        bool anyEngagedB = UpdateSoldierEngagement(ref offsetsB, transB, transA, colliderA.width, colliderA.depth, engagementDistSq);
 
         if (anyEngagedB)
         {
@@ -134,28 +121,17 @@ struct ProcessEngagementsJob : ITriggerEventsJob
         }
     }
 
-    private bool UpdateSoldierEngagement(
-        ref DynamicBuffer<SoldierOffset> offsets,
-        LocalTransform myTrans,
-        LocalTransform enemyTrans,
-        float enemyWidth,
-        float enemyDepth,
-        float engagementDistSq)
+    private bool UpdateSoldierEngagement(ref DynamicBuffer<SoldierOffset> offsets, LocalTransform myTrans, LocalTransform enemyTrans, float enemyWidth, float enemyDepth, float engagementDistSq)
     {
         bool anyEngaged = false;
 
         float3 enemyAnchor = enemyTrans.Position; 
         quaternion enemyInverseRot = math.inverse(enemyTrans.Rotation);
-        
-        // Local Bounds relative to enemyAnchor (Front Center)
-        float minX = -enemyWidth * 0.5f;
-        float maxX = enemyWidth * 0.5f;
-        
-        // Expanded Z bounds slightly to account for collider bevel/padding
-        // Collider extends from roughly 0 to -depth.
-        // We allow a small positive buffer (+0.2f) for frontal engagement.
-        float minZ = -enemyDepth; 
-        float maxZ = 0.2f;          
+
+        float boundMinX = -enemyWidth * 0.5f;
+        float boundMaxX = enemyWidth * 0.5f;       
+        float boundMinZ = -enemyDepth; 
+        float boundMaxZ = 0.2f;          
 
         for (int i = 0; i < offsets.Length; i++)
         {
@@ -163,20 +139,30 @@ struct ProcessEngagementsJob : ITriggerEventsJob
             
             if (soldier.isDead) continue;
 
-            // Calculate Soldier World Position using Transform (Physics Sync)
             float3 soldierWorldPos = myTrans.Position + math.rotate(myTrans.Rotation, soldier.currentOffset);
-            float3 localPos = math.rotate(enemyInverseRot, soldierWorldPos - enemyAnchor);
+            float3 soldierEnemyLocalPos = math.rotate(enemyInverseRot, soldierWorldPos - enemyAnchor);
 
-            // Calculate distance to the OBB
-            float dx = 0f;
-            if (localPos.x < minX) dx = minX - localPos.x;
-            else if (localPos.x > maxX) dx = localPos.x - maxX;
+            float distanceToBoxX = 0f;
+            if (soldierEnemyLocalPos.x < boundMinX) 
+            { 
+                distanceToBoxX = boundMinX - soldierEnemyLocalPos.x; 
+            }
+            else if (soldierEnemyLocalPos.x > boundMaxX) 
+            { 
+                distanceToBoxX = soldierEnemyLocalPos.x - boundMaxX;
+            }
 
-            float dz = 0f;
-            if (localPos.z < minZ) dz = minZ - localPos.z;
-            else if (localPos.z > maxZ) dz = localPos.z - maxZ;
+            float distanceToBoxZ = 0f;
+            if (soldierEnemyLocalPos.z < boundMinZ)
+            {
+                distanceToBoxZ = boundMinZ - soldierEnemyLocalPos.z;
+            }
+            else if (soldierEnemyLocalPos.z > boundMaxZ)
+            {
+                distanceToBoxZ = soldierEnemyLocalPos.z - boundMaxZ;
+            }
             
-            float distSq = dx * dx + dz * dz;
+            float distSq = distanceToBoxX * distanceToBoxX + distanceToBoxZ * distanceToBoxZ;
 
             if (distSq < engagementDistSq)
             {

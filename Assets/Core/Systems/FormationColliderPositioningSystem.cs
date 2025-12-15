@@ -27,11 +27,9 @@ public partial struct FormationColliderPositioningSystem : ISystem
                 int soldierCount = posData.ValueRO.soldierCount;
                 int rows = (int)math.ceil((float)soldierCount / columns);
 
-                // Ensure dimensions are large enough for the BevelRadius (0.05f requires min size > 0.1f)
                 float width = math.max(0.2f, (columns - 1) * spacing + 2.0f); 
                 float depth = math.max(0.2f, (rows - 1) * spacing + 2.0f);
                 float3 localCenter = new float3(0, .9f, -depth * .5f);
-
 
                 var newCollider = BoxCollider.Create(new BoxGeometry
                 {
@@ -49,7 +47,8 @@ public partial struct FormationColliderPositioningSystem : ISystem
                 colliderData.ValueRW.lastColumns = columns;
                 colliderData.ValueRW.lastSoldierCount = soldierCount;
                 colliderData.ValueRW.needsRebuilt = false;
-
+                colliderData.ValueRW.depth = depth;
+                colliderData.ValueRW.width = width; 
             }
         }
 

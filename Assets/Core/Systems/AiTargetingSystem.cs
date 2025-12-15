@@ -9,13 +9,9 @@ public partial struct AiTargetingSystem : ISystem
         EntityCommandBuffer ecb = new EntityCommandBuffer(Allocator.Temp);
         float deltaTime = SystemAPI.Time.DeltaTime;
 
-        // Updated query to include FormationCombatData to get the troop type
-        foreach (var (posData, engagementData, commandData, colliderData, combatData, entity) in 
-            SystemAPI.Query<RefRW<FormationPositionData>, RefRW<FormationEngagementData>, RefRW<AiCommandData>, RefRW<FormationColliderData>, RefRO<FormationCombatData>>()
-            .WithAll<AiControlled>()
-            .WithEntityAccess())
+        foreach (var (posData, engagementData, commandData, colliderData, combatData, entity) in SystemAPI.Query<RefRW<FormationPositionData>, RefRW<FormationEngagementData>, RefRW<AiCommandData>, RefRW<FormationColliderData>, 
+            RefRO<FormationCombatData>>().WithAll<AiControlled>().WithEntityAccess())
         {
-            // Update the timer
             commandData.ValueRW.timeSinceCommand += deltaTime;
 
             if (engagementData.ValueRO.isEngaged) continue;
@@ -52,18 +48,35 @@ public partial struct AiTargetingSystem : ISystem
     {
         var enemyPos = SystemAPI.GetComponent<FormationPositionData>(targetEnemy);
         
+        int enemyRows = (int)math.ceil((float)enemyPos.soldierCount / enemyPos.columns);
+        float enemyDepth = (enemyRows - 1) * enemyPos.spacing;
+        
+        float3 enemyForward = math.forward(enemyPos.facing);
+        float3 enemyRight = math.cross(math.up(), enemyForward);
+        float3 enemyTrueCenter = enemyPos.centerPosition - enemyForward * (enemyDepth * 0.5f);
+
         float3 directionToEnemy = enemyPos.centerPosition - aiPos.ValueRO.centerPosition;
-        directionToEnemy.y = 0; 
+        directionToEnemy.y = 0;
 
         if (math.lengthsq(directionToEnemy) > 0.1f)
         {
+            float3 attackDirection = math.normalize(directionToEnemy);
             
-            aiPos.ValueRW.targetPosition = enemyPos.centerPosition;
+            uint seed = (uint)(SystemAPI.Time.ElapsedTime * 1000) + (uint)targetEnemy.Index;
+            var rng = new Unity.Mathematics.Random(seed);
+            
+            float depthVariation = rng.NextFloat(-0.15f, 0.15f);
+            float randomizedDepth = math.clamp(aiPos.ValueRO.desiredAttackDepth + depthVariation, 0f, 1f);
+            
+            float3 targetPos = math.lerp(enemyPos.centerPosition, enemyTrueCenter, randomizedDepth * 2f);
+            targetPos.y = enemyPos.centerPosition.y;
 
-            aiPos.ValueRW.targetFacing = quaternion.LookRotationSafe(math.normalize(directionToEnemy), math.up());
+            float lateralOffset = rng.NextFloat(-1.5f, 1.5f);
+            targetPos += enemyRight * lateralOffset;
 
+            aiPos.ValueRW.targetPosition = targetPos;
+            aiPos.ValueRW.targetFacing = quaternion.LookRotationSafe(attackDirection, math.up());
             aiPos.ValueRW.formationState = FormationState.retargeting;
-
             aiCollider.ValueRW.needsRebuilt = true;
         }
     }
@@ -109,9 +122,7 @@ public partial struct AiTargetingSystem : ISystem
     }
     private float GetFormationDistance(FormationPositionData pos, float3 point)
     {
-        return math.distance(
-            new float2(pos.centerPosition.x, pos.centerPosition.z),
-            new float2(point.x, point.z));
+        return math.distance(new float2(pos.centerPosition.x, pos.centerPosition.z), new float2(point.x, point.z));
     }
 
     #endregion

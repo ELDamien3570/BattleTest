@@ -5,29 +5,23 @@ using Unity.Physics;
 
 public struct FormationPositionData : IComponentData
 {
-    //Location
+    //location
     public float3 centerPosition;
     public float3 targetPosition;
 
-    //Rotation
+    //rotation
     public quaternion facing;
     public quaternion targetFacing; 
     public float facingTolerance;
 
-    //Soldier Placement
+    //formations composition
     public int columns;
     public int rows;
     public int soldierCount;
     public float spacing;
 
-    //State
     public FormationState formationState;
-    
-    //blend progress
-    public float formationBlendProgress;
-
-    public float desiredAttackDepth; //0-1, how close they'll get to the center of the enemy formation
-
+    public float desiredAttackDepth; //0-1, how close they'll get to the back of the enemy formation
 }
 public struct FormationEngagementData : IComponentData
 {
@@ -46,7 +40,7 @@ public struct FormationMovementData : IComponentData
 
 public struct FormationCombatData : IComponentData
 {
-    public int troopType; //0 = infantry, 1 = archer, 2 = cav, 3 = cav archer
+    public int troopType; 
     public int meleeDamage;
     public int meleeDefense;
     public float formationHealth;
@@ -58,8 +52,6 @@ public struct FormationCombatData : IComponentData
 
 public struct FormationRenderData : IComponentData
 {
-    public int currentAnimation;       //0 = idle, 1 = walk, 2 = combat
-    public int animationFrame;
     public float animationTimer;
     public FixedString32Bytes soldierType;
     public FixedString32Bytes renderMaterial;
@@ -73,7 +65,8 @@ public struct FormationColliderData : IComponentData
     public bool needsRebuilt;
     public CollisionFilter filter;
     public Material material;
-    
+    public float width;
+    public float depth;
 }
 
 public struct SoldierOffset : IBufferElementData
@@ -97,14 +90,17 @@ public enum FormationState
     idle
 }
 
-
-//tag components
-
+public struct PlayerCommandData : IComponentData
+{
+    public Entity setTargetFormation;
+    public float timeSinceCommand;
+}
 public struct AiCommandData : IComponentData
 {
     public float timeSinceCommand;
 }
 
+//tag components
 public struct FormationSelected : IComponentData { }
 public struct PlayerControlled : IComponentData { }
 public struct AiControlled : IComponentData { }

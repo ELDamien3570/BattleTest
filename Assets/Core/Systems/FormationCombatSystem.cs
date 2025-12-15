@@ -9,8 +9,7 @@ public partial struct FormationCombatSystem : ISystem
     {
         float deltaTime = SystemAPI.Time.DeltaTime;
 
-        foreach (var (offsets, engagementData, combatData) in
-            SystemAPI.Query<DynamicBuffer<SoldierOffset>, RefRO<FormationEngagementData>, RefRW<FormationCombatData>>())
+        foreach (var (offsets, engagementData, combatData) in SystemAPI.Query<DynamicBuffer<SoldierOffset>, RefRO<FormationEngagementData>, RefRW<FormationCombatData>>())
         {
             float damageThisFrame = combatData.ValueRO.meleeDamage * deltaTime;
 
@@ -138,8 +137,7 @@ public partial struct DeadSoldierRemovalSystem : ISystem
         var ecb = new EntityCommandBuffer(Unity.Collections.Allocator.Temp);
         var bufferLookup = SystemAPI.GetBufferLookup<SoldierOffset>(false);
 
-        foreach (var (positionData, colliderData, combatData, entity) in
-            SystemAPI.Query<RefRW<FormationPositionData>, RefRW<FormationColliderData>, RefRW<FormationCombatData>>().WithEntityAccess())
+        foreach (var (positionData, colliderData, combatData, entity) in SystemAPI.Query<RefRW<FormationPositionData>, RefRW<FormationColliderData>, RefRW<FormationCombatData>>().WithEntityAccess())
         {
             if (!bufferLookup.HasBuffer(entity)) continue;
 
@@ -172,8 +170,7 @@ public partial struct DeadSoldierRemovalSystem : ISystem
             {
                 positionData.ValueRW.soldierCount = offsets.Length;
 
-                if (positionData.ValueRO.formationState == FormationState.idle ||
-                    positionData.ValueRO.formationState == FormationState.retargeting)
+                if (positionData.ValueRO.formationState == FormationState.idle || positionData.ValueRO.formationState == FormationState.retargeting)
                 {
                     positionData.ValueRW.formationState = FormationState.rebuilding;
                 }

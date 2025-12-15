@@ -93,9 +93,7 @@ public class RTSCamera : MonoBehaviour
 
     void Update()
     {
-        Vector3 worldMove = ComputePanFromWASD()
-                          + ComputePanFromEdgeScroll()
-                          + ComputePanFromMMBDrag_Direct();
+        Vector3 worldMove = ComputePanFromWASD() + ComputePanFromEdgeScroll() + ComputePanFromMMBDrag_Direct();
 
         if (worldMove.sqrMagnitude > 0f)
         {
@@ -105,8 +103,6 @@ public class RTSCamera : MonoBehaviour
 
         ApplyRotation();
         ApplyZoomWithTilt();
-
-        PreventGroundClipping();
     }
 
     Vector3 ComputePanFromWASD()
@@ -204,7 +200,6 @@ public class RTSCamera : MonoBehaviour
         cam.transform.localEulerAngles = e;
     }
 
-    //Helpers
     #region 
     void ClampPivotToBounds()
     {
@@ -231,43 +226,6 @@ public class RTSCamera : MonoBehaviour
                 Mathf.Clamp(pivot.position.z, -xzLimits.y, xzLimits.y)
             );
         }
-    }
-
-    void PreventGroundClipping()
-    {
-        // Start with current pivot height
-        float targetPivotY = pivot.position.y;
-
-        // 1. If configured, clamp pivot to terrain height
-        if (clampToTerrain)
-        {
-            Vector3 pivotRayOrigin = new Vector3(pivot.position.x, 2000f, pivot.position.z);
-            if (Physics.Raycast(pivotRayOrigin, Vector3.down, out var hit, 4000f, groundMask, QueryTriggerInteraction.Ignore))
-            {
-                targetPivotY = hit.point.y + cameraHeightOffset;
-            }
-        }
-
-        // 2. Ensure Camera itself doesn't clip through ground
-        // Calculate theoretical camera position based on targetPivotY
-        Vector3 camOffset = pivot.rotation * cam.transform.localPosition;
-        Vector3 potentialCamPos = new Vector3(pivot.position.x, targetPivotY, pivot.position.z) + camOffset;
-
-        // Check terrain height at camera's XZ
-        Vector3 camRayOrigin = new Vector3(potentialCamPos.x, 2000f, potentialCamPos.z);
-        if (Physics.Raycast(camRayOrigin, Vector3.down, out var hitCam, 4000f, groundMask, QueryTriggerInteraction.Ignore))
-        {
-            float minCamY = hitCam.point.y + 1.0f; // Keep camera at least 1 unit above ground
-            if (potentialCamPos.y < minCamY)
-            {
-                // Lift the pivot enough to raise the camera
-                float lift = minCamY - potentialCamPos.y;
-                targetPivotY += lift;
-            }
-        }
-
-        // Apply the calculated height
-        pivot.position = new Vector3(pivot.position.x, targetPivotY, pivot.position.z);
     }
 
     #endregion 

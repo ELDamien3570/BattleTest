@@ -55,12 +55,7 @@ public partial struct BattleSetupSystem : ISystem
         state.Enabled = false;
     }
 
-    private void SpawnArmy(
-        ref SystemState state,
-        BattleSetupData setupData,
-        NativeArray<FixedString32Bytes> soldierTypes,
-        ref NativeHashMap<FixedString32Bytes, BlobAssetReference<Collider>> colliderCache,
-        bool isPlayer)
+    private void SpawnArmy(ref SystemState state, BattleSetupData setupData, NativeArray<FixedString32Bytes> soldierTypes, ref NativeHashMap<FixedString32Bytes, BlobAssetReference<Collider>> colliderCache, bool isPlayer)
     {
         var eManager = state.EntityManager;
 
@@ -74,13 +69,9 @@ public partial struct BattleSetupSystem : ISystem
         FixedString32Bytes materialName = isPlayer ? setupData.playerMaterial : setupData.aiMaterial;
         CollisionFilter filter = isPlayer ? FormationPhysics.PlayerFilter : FormationPhysics.AIFilter;
 
-        // Determine facing and Z-offset direction
-        // Player faces Forward (+Z), so "behind" is -Z.
-        // AI faces Backward (-Z), so "behind" is +Z.
         quaternion armyFacing = isPlayer ? quaternion.identity : quaternion.RotateY(math.PI);
         float zDirection = isPlayer ? -1f : 1f;
 
-        // Define the rows
         var rowTypes = new NativeArray<FixedString32Bytes>(3, Allocator.Temp);
         rowTypes[0] = "Spearmen";
         rowTypes[1] = "playerInfantry";
@@ -95,23 +86,18 @@ public partial struct BattleSetupSystem : ISystem
             FixedString32Bytes soldierType = rowTypes[row];
             TroopTypeData data = GetTroopTypeData(soldierType, soldiersPerFormation, columns);
 
-            // Calculate Z position for this row (offset from previous row)
             if (row > 0)
             {
                 float offset = (prevRowDepth * 0.5f) + rowGap + (data.formationDepth * 0.5f);
                 currentZ += offset * zDirection;
             }
 
-            // Calculate X centering for the row
             float totalRowWidth = (formationCount * data.formationWidth) + ((formationCount - 1) * formationGap);
             float currentX = -totalRowWidth * 0.5f;
 
             for (int i = 0; i < formationCount; i++)
             {
-                float3 spawnPosition = new float3(
-                    startLocation.x + currentX + (data.formationWidth * 0.5f),
-                    startLocation.y,
-                    currentZ
+                float3 spawnPosition = new float3(startLocation.x + currentX + (data.formationWidth * 0.5f), startLocation.y, currentZ
                 );
                 currentX += data.formationWidth + formationGap;
 
@@ -188,8 +174,6 @@ public partial struct BattleSetupSystem : ISystem
 
                 eManager.SetComponentData(formation, new FormationRenderData
                 {
-                    currentAnimation = 0,
-                    animationFrame = 0,
                     animationTimer = 0,
                     soldierType = data.soldierType,
                     renderMaterial = materialName
@@ -231,7 +215,10 @@ public partial struct BattleSetupSystem : ISystem
         );
 
         if (isPlayer)
+        {
             eManager.AddComponent<PlayerControlled>(formation);
+            eManager.AddComponent<PlayerCommandData>(formation);
+        }
         else
         {
             eManager.AddComponent<AiControlled>(formation);
@@ -284,7 +271,7 @@ public partial struct BattleSetupSystem : ISystem
             data.healthPerTroop = 1000;
             data.damage = 13;
             data.defense = 8;
-            data.attackDepth = 0.4f;
+            data.attackDepth = 0.5f;
         }
         else if (soldierType.Contains(new FixedString32Bytes("LightCavalry")))
         {
@@ -294,7 +281,7 @@ public partial struct BattleSetupSystem : ISystem
             data.healthPerTroop = 800;
             data.damage = 10;
             data.defense = 4;
-            data.attackDepth = 0.8f;
+            data.attackDepth = .6f;
         }
 
         int rows = (int)math.ceil((float)soldierCount / columns);
@@ -315,8 +302,6 @@ public partial struct BattleSetupSystem : ISystem
         public int damage;
         public int defense;
         public float attackDepth;
-
-        // Derived
         public float formationWidth;
         public float formationDepth;
         public int formationHealth;

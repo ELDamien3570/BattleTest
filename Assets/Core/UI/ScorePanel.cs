@@ -21,7 +21,6 @@ public class ScorePanel : MonoBehaviour
         entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
         stateQuery = entityManager.CreateEntityQuery(ComponentType.ReadOnly<BattleStateData>());
 
-        // Ensure panels are hidden at start
         if (WinPanel) WinPanel.SetActive(false);
         if (LostPanel) LostPanel.SetActive(false);
         if (scorePanel) scorePanel.SetActive(true);

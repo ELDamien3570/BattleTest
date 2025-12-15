@@ -13,7 +13,7 @@ public partial struct FormationRebuildSystem : ISystem
             {
                 FormationBuilderUtility.RebuildFormation(ref group.ValueRW, offsets, group.ValueRW.spacing);
 
-                float angleDiff = QuaternionAngle(group.ValueRO.facing, group.ValueRO.targetFacing);
+                float angleDiff = AngleComparator(group.ValueRO.facing, group.ValueRO.targetFacing);
                 
                 if (angleDiff > group.ValueRO.facingTolerance) 
                 {
@@ -27,7 +27,7 @@ public partial struct FormationRebuildSystem : ISystem
         }
     }
     
-    private static float QuaternionAngle(quaternion a, quaternion b)
+    private static float AngleComparator(quaternion a, quaternion b)
     {
         float dot = math.abs(math.dot(a, b));
         return math.acos(math.min(dot, 1.0f)) * 2.0f;

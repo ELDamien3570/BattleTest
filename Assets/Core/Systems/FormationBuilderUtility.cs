@@ -25,11 +25,7 @@ public static class FormationBuilderUtility
                 int col = i % columns;
                 int row = i / columns;
 
-                float3 localOffset = new float3(
-                    (col * spacing) - halfWidth,
-                    0,
-                    -row * spacing
-                );
+                float3 localOffset = new float3((col * spacing) - halfWidth, 0, -row * spacing);
 
                 offsets.Add(new SoldierOffset
                 {
@@ -52,6 +48,7 @@ public static class FormationBuilderUtility
             quaternion currentFacing = group.facing;
             
             NativeArray<float3> soldierWorldPositions = new NativeArray<float3>(soldierCount, Allocator.Temp);
+
             for (int i = 0; i < offsets.Length; i++)
             {
                 soldierWorldPositions[i] = group.centerPosition + math.rotate(currentFacing, offsets[i].currentOffset);
@@ -65,31 +62,18 @@ public static class FormationBuilderUtility
                 int col = i % columns;
                 int row = i / columns;
 
-                newLocalPositions[i] = new float3(
-                    (col * spacing) - halfWidth,
-                    0,
-                    -row * spacing
-                );
+                newLocalPositions[i] = new float3((col * spacing) - halfWidth, 0, -row * spacing);
             }
 
-            AssignSoldiersToClosestPositions(offsets, soldierWorldPositions, newLocalPositions, 
-                group.centerPosition, currentFacing, group.targetFacing, ref random);
+            AssignSoldiersToClosestPositions(offsets, soldierWorldPositions, newLocalPositions, group.centerPosition, currentFacing, group.targetFacing, ref random);
             
             soldierWorldPositions.Dispose();
             newLocalPositions.Dispose();
         }
-        
-        group.formationBlendProgress = 0f;
+
     }
 
-    private static void AssignSoldiersToClosestPositions(
-        DynamicBuffer<SoldierOffset> soldiers, 
-        NativeArray<float3> soldierWorldPositions,
-        NativeArray<float3> newLocalPositions,
-        float3 centerPosition,
-        quaternion currentFacing,
-        quaternion targetFacing,
-        ref Unity.Mathematics.Random random)
+    private static void AssignSoldiersToClosestPositions(DynamicBuffer<SoldierOffset> soldiers,  NativeArray<float3> soldierWorldPositions,NativeArray<float3> newLocalPositions, float3 centerPosition,quaternion currentFacing,quaternion targetFacing,ref Unity.Mathematics.Random random)
     {
         int count = soldiers.Length;
         

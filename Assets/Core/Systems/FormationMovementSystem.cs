@@ -11,7 +11,7 @@ public partial struct FormationMovementSystem : ISystem
         {
             float soldierMoveSpeed = movementData.ValueRW.moveSpeed;
             float movementThreshold = 0.05f;
-            float soldierRotationSpeed = movementData.ValueRW.rotationSpeed; //speed for individual soldier turns
+            float soldierRotationSpeed = movementData.ValueRW.rotationSpeed; //speed for individual soldier 
 
             positionData.ValueRW.facing = math.normalize(positionData.ValueRW.facing);
             positionData.ValueRW.targetFacing = math.normalize(positionData.ValueRW.targetFacing);
@@ -42,7 +42,7 @@ public partial struct FormationMovementSystem : ISystem
                     offsets[i] = soldier;
                 }
 
-                float angleDiff = QuaternionAngle(positionData.ValueRO.facing, positionData.ValueRO.targetFacing);
+                float angleDiff = AngleComparator(positionData.ValueRO.facing, positionData.ValueRO.targetFacing);
                 
                 if (angleDiff < positionData.ValueRO.facingTolerance) //review later
                 {
@@ -192,7 +192,7 @@ public partial struct FormationMovementSystem : ISystem
 
     }
     
-    private static float QuaternionAngle(quaternion a, quaternion b)
+    private static float AngleComparator(quaternion a, quaternion b)
     {
         float dot = math.abs(math.dot(a, b));
         return math.acos(math.min(dot, 1.0f)) * 2.0f;
