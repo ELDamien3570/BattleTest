@@ -1,14 +1,18 @@
+using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics;
 using Unity.Transforms;
 
 [UpdateInGroup(typeof(InitializationSystemGroup))]
+[UpdateAfter(typeof(BattleSetupSystem))]
 public partial struct FormationColliderPositioningSystem : ISystem
 {
+
     public void OnCreate(ref SystemState state)
     {
         state.RequireForUpdate<SimulationSingleton>();
+
     }
     public void OnUpdate(ref SystemState state)
     {
@@ -32,7 +36,7 @@ public partial struct FormationColliderPositioningSystem : ISystem
                 int soldierCount = posData.ValueRO.soldierCount;
                 int rows = (int)math.ceil((float)soldierCount / columns);
 
-                float width = math.max(0.2f, (columns - 1) * spacing + 2.0f); 
+                float width = math.max(0.2f, (columns - 1) * spacing + 2.0f);
                 float depth = math.max(0.2f, (rows - 1) * spacing + 2.0f);
 
                 float3 localCenter;
@@ -45,11 +49,11 @@ public partial struct FormationColliderPositioningSystem : ISystem
                 var newCollider = BoxCollider.Create(new BoxGeometry
                 {
                     Center = localCenter,
-                    Size = new float3(width, 10f, depth*1.1f),
+                    Size = new float3(width, 10f, depth * 1.1f),
                     Orientation = quaternion.identity,
                     BevelRadius = 0.05f
                 },
-                    colliderData.ValueRO.filter, 
+                    colliderData.ValueRO.filter,
                     colliderData.ValueRO.material
                 );
 
@@ -59,12 +63,11 @@ public partial struct FormationColliderPositioningSystem : ISystem
                 colliderData.ValueRW.lastSoldierCount = soldierCount;
                 colliderData.ValueRW.needsRebuilt = false;
                 colliderData.ValueRW.depth = depth;
-                colliderData.ValueRW.width = width; 
+                colliderData.ValueRW.width = width;
             }
         }
 
         ecb.Playback(state.EntityManager);
         ecb.Dispose();
     }
-
 }

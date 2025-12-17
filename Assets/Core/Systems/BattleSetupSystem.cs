@@ -110,21 +110,21 @@ public partial struct BattleSetupSystem : ISystem
                 if (data.formationDepth < 1) data.formationWidth = 1.5f;
                 if (data.formationDepth < 1) data.formationDepth = 1.5f;
 
-                if (!colliderCache.TryGetValue(cacheKey, out var colliderBlob))
-                {
-                    colliderBlob = BoxCollider.Create(new BoxGeometry
-                    {
-                        Center = colliderCenter,
-                        Size = new float3(data.formationWidth, 2f, data.formationDepth),
-                        Orientation = quaternion.identity,
-                        BevelRadius = 0.1f
-                    },
-                    filter,
-                    FormationPhysics.TriggerMaterial);
+                //if (!colliderCache.TryGetValue(cacheKey, out var colliderBlob))
+                //{
+                //    colliderBlob = BoxCollider.Create(new BoxGeometry
+                //    {
+                //        Center = colliderCenter,
+                //        Size = new float3(data.formationWidth, 2f, data.formationDepth),
+                //        Orientation = quaternion.identity,
+                //        BevelRadius = 0.1f
+                //    },
+                //    filter,
+                //    FormationPhysics.TriggerMaterial);
 
-                    colliderCache.Add(cacheKey, colliderBlob);
-                    _allocatedColliders.Add(colliderBlob);
-                }
+                //    colliderCache.Add(cacheKey, colliderBlob);
+                //    _allocatedColliders.Add(colliderBlob);
+                //}
 
                 eManager.SetComponentData(formation, LocalTransform.FromPositionRotation(spawnPosition, armyFacing));
                 eManager.SetSharedComponentManaged(formation, new PhysicsWorldIndex(0));
@@ -135,7 +135,7 @@ public partial struct BattleSetupSystem : ISystem
                     Angular = float3.zero
                 });
 
-                eManager.SetComponentData(formation, new PhysicsCollider { Value = colliderBlob });
+                eManager.SetComponentData(formation, new PhysicsCollider { Value = BlobAssetReference<Collider>.Null }); //colliderBlob
 
                 eManager.SetComponentData(formation, new FormationColliderData
                 {
